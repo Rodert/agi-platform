@@ -7,7 +7,7 @@ VALUES (1, 'admin', '$2a$10$No72On/WKoV/8ZRXpFRM5uzIRP5YoXe544GX79XE3bWTFOmglEPR
 ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`), `role` = VALUES(`role`);
 
 INSERT INTO `users` (`id`, `email`, `password_hash`, `nickname`, `credits`, `status`)
-VALUES (1, 'demo@example.com', 'not-set', 'Demo User', 1000, 'active')
+VALUES (1, 'user@example.com', '$2a$10$eQFCGz6k9lCk6egZH9vmi.clHXrljQRf1lavxGgjuJu.J1ohQPhie', 'User', 1000, 'active')
 ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`);
 
 INSERT INTO `providers` (`id`, `code`, `name`, `type`, `base_url`, `enabled`, `timeout_seconds`, `retry_count`, `priority`, `remark`)
