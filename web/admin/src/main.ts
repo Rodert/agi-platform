@@ -1,4 +1,4 @@
-import { createApp, reactive } from "vue";
+import { createApp, reactive, ref } from "vue";
 import {
   ApiClient,
   type AdminUser,
@@ -14,6 +14,8 @@ import {
 import {
   Boxes,
   Database,
+  Eye,
+  EyeOff,
   KeyRound,
   Loader2,
   LogOut,
@@ -43,6 +45,7 @@ const state = reactive({
 });
 
 const loginForm = reactive({ username: "admin", password: "admin123" });
+const showPassword = ref(false);
 const creditForm = reactive({ user_id: 1, amount: 100, remark: "manual bonus" });
 const providerForm = reactive({
   id: 0,
@@ -266,12 +269,13 @@ function logout() {
 }
 
 const App = {
-  components: { Boxes, Database, KeyRound, Loader2, LogOut, RefreshCw, Route, Server, Users },
+  components: { Boxes, Database, Eye, EyeOff, KeyRound, Loader2, LogOut, RefreshCw, Route, Server, Users },
   setup() {
     bootstrap();
     return {
       state,
       loginForm,
+      showPassword,
       creditForm,
       providerForm,
       providerKeyForm,
@@ -312,7 +316,20 @@ const App = {
         <section v-if="!state.admin" class="login-panel">
           <h1>管理后台</h1>
           <label>账号<input v-model="loginForm.username" /></label>
-          <label>密码<input v-model="loginForm.password" type="password" /></label>
+          <label>密码
+            <span class="password-field">
+              <input v-model="loginForm.password" :type="showPassword ? 'text' : 'password'" />
+              <button
+                class="password-toggle"
+                type="button"
+                :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                @click="showPassword = !showPassword"
+              >
+                <EyeOff v-if="showPassword" :size="17" />
+                <Eye v-else :size="17" />
+              </button>
+            </span>
+          </label>
           <button class="primary-button" @click="login" :disabled="state.loading">
             <Loader2 v-if="state.loading" class="spin" :size="16" />登录
           </button>
@@ -415,4 +432,3 @@ const App = {
 };
 
 createApp(App).mount("#app");
-

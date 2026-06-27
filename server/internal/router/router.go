@@ -16,7 +16,7 @@ func New(cfg config.Config, handlers handler.Handlers) *gin.Engine {
 	}
 
 	r := gin.New()
-	r.Use(gin.Logger(), middleware.RequestID(), middleware.Recovery())
+	r.Use(gin.Logger(), middleware.CORS(), middleware.RequestID(), middleware.Recovery())
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})

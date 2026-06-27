@@ -1,5 +1,7 @@
 USE `agi_platform`;
 
+SET NAMES utf8mb4;
+
 INSERT INTO `admin_users` (`id`, `username`, `password_hash`, `nickname`, `role`, `status`)
 VALUES (1, 'admin', '$2a$10$No72On/WKoV/8ZRXpFRM5uzIRP5YoXe544GX79XE3bWTFOmglEPRu', 'Administrator', 'super_admin', 'active')
 ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`), `role` = VALUES(`role`);

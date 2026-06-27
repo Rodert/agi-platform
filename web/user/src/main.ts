@@ -14,6 +14,8 @@ import {
   ArrowDownToLine,
   Brush,
   Code2,
+  Eye,
+  EyeOff,
   Image,
   KeyRound,
   Loader2,
@@ -57,6 +59,8 @@ const generateForm = reactive({
 const keyForm = reactive({
   name: "default"
 });
+
+const showPassword = ref(false);
 
 const api = new ApiClient({
   getToken: () => state.token,
@@ -154,6 +158,8 @@ const App = {
     ArrowDownToLine,
     Brush,
     Code2,
+    Eye,
+    EyeOff,
     Image,
     KeyRound,
     Loader2,
@@ -169,9 +175,11 @@ const App = {
       authForm,
       generateForm,
       keyForm,
+      showPassword,
       selectedModel,
       formatCredits,
       parseJSONList,
+      loadMe,
       submitAuth,
       generateImage,
       createApiKey,
@@ -222,7 +230,20 @@ const App = {
               <button :class="{ active: state.authMode === 'register' }" @click="state.authMode = 'register'">注册</button>
             </div>
             <label>邮箱<input v-model="authForm.email" /></label>
-            <label>密码<input v-model="authForm.password" type="password" /></label>
+            <label>密码
+              <span class="password-field">
+                <input v-model="authForm.password" :type="showPassword ? 'text' : 'password'" />
+                <button
+                  class="password-toggle"
+                  type="button"
+                  :aria-label="showPassword ? '隐藏密码' : '显示密码'"
+                  @click="showPassword = !showPassword"
+                >
+                  <EyeOff v-if="showPassword" :size="17" />
+                  <Eye v-else :size="17" />
+                </button>
+              </span>
+            </label>
             <label v-if="state.authMode === 'register'">昵称<input v-model="authForm.nickname" /></label>
             <button class="primary-button" @click="submitAuth" :disabled="state.loading">
               <Loader2 v-if="state.loading" class="spin" :size="17" /> {{ state.authMode === 'login' ? '登录' : '创建账号' }}
@@ -335,4 +356,3 @@ Authorization: Bearer agi_xxx
 };
 
 createApp(App).mount("#app");
-

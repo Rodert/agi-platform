@@ -1,0 +1,96 @@
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: agi_platform
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: golang:1.24
+    working_dir: /app/server
+    command: go run -buildvcs=false ./cmd/server
+    environment:
+      APP_ENV: local
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      JWT_SECRET: local-dev-secret-change-me
+      JWT_EXPIRE_SECONDS: 604800
+      REGISTER_GIFT_CREDITS: 100
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ""
+      MYSQL_DATABASE: agi_platform
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  user-web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm dev:user"
+    environment:
+      VITE_API_BASE_URL: http://127.0.0.1:8080
+      COREPACK_HOME: /corepack
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - corepack-cache:/corepack
+      - pnpm-store:/pnpm/store
+      - node-modules:/app/node_modules
+      - user-node-modules:/app/web/user/node_modules
+      - admin-node-modules:/app/web/admin/node_modules
+      - shared-node-modules:/app/web/shared/node_modules
+    depends_on:
+      - server
+
+  admin-web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm config set store-dir /pnpm/store && pnpm install --frozen-lockfile && pnpm dev:admin"
+    environment:
+      VITE_API_BASE_URL: http://127.0.0.1:8080
+      COREPACK_HOME: /corepack
+    ports:
+      - "5174:5174"
+    volumes:
+      - .:/app
+      - corepack-cache:/corepack
+      - pnpm-store:/pnpm/store
+      - node-modules:/app/node_modules
+      - user-node-modules:/app/web/user/node_modules
+      - admin-node-modules:/app/web/admin/node_modules
+      - shared-node-modules:/app/web/shared/node_modules
+    depends_on:
+      - server
+
+volumes:
+  mysql-data:
+  go-mod-cache:
+  go-build-cache:
+  corepack-cache:
+  pnpm-store:
+  node-modules:
+  user-node-modules:
+  admin-node-modules:
+  shared-node-modules:
