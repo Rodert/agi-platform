@@ -209,7 +209,7 @@ GitHub Actions 文件：
 
 会构建并推送后端镜像：
 
-- `agi-platform-server`
+- `crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com/project-shiyu/agi-platform-server:latest`
 
 需要在 GitHub 仓库配置 Secrets：
 
@@ -218,19 +218,61 @@ ALIYUN_REGISTRY_USER
 ALIYUN_REGISTRY_PASSWORD
 ```
 
-镜像部署可以使用：
+服务器部署文件：
 
-```bash
-docker compose -f compose.images.yaml up -d
+```text
+compose.images.yaml
+deploy/backend.env.example
+deploy/nginx-api.conf.example
 ```
 
-如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。
-
-如果要指定镜像 tag：
+服务器首次部署：
 
 ```bash
-IMAGE_TAG=<git-sha-or-tag> docker compose -f compose.images.yaml up -d
+git clone <your-repo-url> agi-platform
+cd agi-platform
+cp deploy/backend.env.example deploy/backend.env
 ```
+
+编辑 `deploy/backend.env`，至少修改：
+
+```text
+MYSQL_ROOT_PASSWORD
+JWT_SECRET
+COS_SECRET_ID
+COS_SECRET_KEY
+COS_BUCKET
+COS_REGION
+COS_PUBLIC_BASE_URL
+```
+
+登录阿里云 ACR：
+
+```bash
+docker login crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com
+```
+
+启动后端和 MySQL：
+
+```bash
+docker compose --env-file deploy/backend.env -f compose.images.yaml up -d
+```
+
+检查状态：
+
+```bash
+docker compose --env-file deploy/backend.env -f compose.images.yaml ps
+curl http://127.0.0.1:8080/health
+```
+
+更新后端镜像：
+
+```bash
+docker compose --env-file deploy/backend.env -f compose.images.yaml pull server
+docker compose --env-file deploy/backend.env -f compose.images.yaml up -d server
+```
+
+如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。`api.xxx.com` 可以用 nginx 或 Caddy 反向代理到 `http://127.0.0.1:8080`，nginx 示例见 `deploy/nginx-api.conf.example`。
 
 ## 数据库
 

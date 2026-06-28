@@ -10,3 +10,4 @@ SecretKey.csv
 *.secret.csv
 apikey
 url
+deploy/backend.env
