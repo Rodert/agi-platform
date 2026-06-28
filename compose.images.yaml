@@ -1,0 +1,64 @@
+services:
+  mysql:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: agi_platform
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  server:
+    image: ${REGISTRY:-crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com}/${REGISTRY_NAMESPACE:-project-shiyu}/agi-platform-server:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    environment:
+      CONFIG_PATH: /app/config.yaml
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./SecretKey.csv:/app/SecretKey.csv:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  user-web:
+    image: ${REGISTRY:-crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com}/${REGISTRY_NAMESPACE:-project-shiyu}/agi-platform-user-web:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        APP_NAME: user
+        VITE_API_BASE_URL: ${USER_WEB_API_BASE_URL:-http://127.0.0.1:8080}
+    ports:
+      - "5173:80"
+    depends_on:
+      - server
+
+  admin-web:
+    image: ${REGISTRY:-crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com}/${REGISTRY_NAMESPACE:-project-shiyu}/agi-platform-admin-web:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        APP_NAME: admin
+        VITE_API_BASE_URL: ${ADMIN_WEB_API_BASE_URL:-http://127.0.0.1:8080}
+    ports:
+      - "5174:80"
+    depends_on:
+      - server
+
+volumes:
+  mysql-data:
