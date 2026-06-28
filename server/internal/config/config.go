@@ -105,7 +105,7 @@ type rawConfig struct {
 	Auth struct {
 		JWTSecret           string `yaml:"jwt_secret"`
 		JWTExpireSeconds    int    `yaml:"jwt_expire_seconds"`
-		RegisterGiftCredits int64  `yaml:"register_gift_credits"`
+		RegisterGiftCredits *int64 `yaml:"register_gift_credits"`
 	} `yaml:"auth"`
 	Admin struct {
 		Enabled                *bool  `yaml:"enabled"`
@@ -176,7 +176,7 @@ func Load() Config {
 		Auth: AuthConfig{
 			JWTSecret:           firstNonEmpty(raw.Auth.JWTSecret, "local-dev-secret-change-me"),
 			TokenLifetime:       time.Duration(firstNonZeroInt(raw.Auth.JWTExpireSeconds, 604800)) * time.Second,
-			RegisterGiftCredits: firstNonZeroInt64(raw.Auth.RegisterGiftCredits, 100),
+			RegisterGiftCredits: firstInt64Ptr(raw.Auth.RegisterGiftCredits, 0),
 		},
 		Admin: AdminConfig{
 			Enabled:                firstBool(raw.Admin.Enabled, true),
@@ -315,14 +315,14 @@ func firstNonZeroInt(value int, fallback int) int {
 	return fallback
 }
 
-func firstNonZeroInt64(value int64, fallback int64) int64 {
-	if value != 0 {
-		return value
+func firstBool(value *bool, fallback bool) bool {
+	if value == nil {
+		return fallback
 	}
-	return fallback
+	return *value
 }
 
-func firstBool(value *bool, fallback bool) bool {
+func firstInt64Ptr(value *int64, fallback int64) int64 {
 	if value == nil {
 		return fallback
 	}

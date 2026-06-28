@@ -83,7 +83,7 @@ docker compose down -v
 管理员账号由 `config.yaml` 的 `admin` 配置生成；生产环境请在 `deploy/backend.env` 中修改 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`，不要沿用默认密码。
 已有管理员不会在每次启动时自动重置密码；如需强制重置，临时设置 `ADMIN_RESET_PASSWORD_ON_STARTUP=true`。
 
-也可以在用户端直接注册新账号。注册赠送积分由 `config.yaml` 的 `auth.register_gift_credits` 控制。
+也可以在用户端直接注册新账号。新注册用户默认 `0` 积分，注册赠送积分由 `config.yaml` 的 `auth.register_gift_credits` 控制。
 
 ## 配置
 

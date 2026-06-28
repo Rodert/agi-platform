@@ -91,12 +91,12 @@ database:
 auth:
   jwt_secret: local-dev-secret-change-me
   jwt_expire_seconds: 604800
-  register_gift_credits: 100
+  register_gift_credits: 0
 ```
 
 - `jwt_secret`：JWT 签名密钥。生产环境必须改成高强度随机字符串。
 - `jwt_expire_seconds`：登录 token 有效期，单位秒。`604800` 等于 7 天。
-- `register_gift_credits`：用户注册赠送积分。
+- `register_gift_credits`：用户注册赠送积分。默认 `0`，新注册用户默认没有积分。
 
 环境变量覆盖：
 
