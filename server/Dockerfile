@@ -17,8 +17,8 @@ COPY --from=builder /out/agi-server /usr/local/bin/agi-server
 RUN mkdir -p /app/uploads && chown -R app:app /app
 
 ENV HTTP_HOST=0.0.0.0 \
-    HTTP_PORT=8080
+    HTTP_PORT=18082
 
-EXPOSE 8080
+EXPOSE 18082
 USER app
 CMD ["agi-server"]

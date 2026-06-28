@@ -5,7 +5,7 @@
 - `mysql`：MySQL 8.4
 - `server`：后端镜像 `crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com/project-shiyu/agi-platform-server:latest`
 
-用户端和管理员后台建议部署到 Cloudflare Pages，后端通过 `api.newmovieai.com` 反向代理到服务器本地 `127.0.0.1:8080`。
+用户端和管理员后台建议部署到 Cloudflare Pages，后端通过 `api.newmovieai.com` 反向代理到服务器本地 `127.0.0.1:18082`。
 
 ## 一、首次部署
 
@@ -56,7 +56,7 @@ docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml up -d
 
 ```bash
 docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml ps
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:18082/health
 ```
 
 ## 二、只重启后端
@@ -151,7 +151,7 @@ docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml ps
 后端健康检查：
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:18082/health
 ```
 
 如果服务器外部通过 nginx 暴露了 `api.newmovieai.com`：
@@ -201,7 +201,7 @@ https://api.newmovieai.com
 nginx/Caddy 反代到：
 
 ```text
-http://127.0.0.1:8080
+http://127.0.0.1:18082
 ```
 
 前端 Cloudflare Pages 中配置：

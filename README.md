@@ -263,7 +263,7 @@ docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml up -d
 
 ```bash
 docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml ps
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:18082/health
 ```
 
 更新后端镜像：
@@ -275,7 +275,7 @@ docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml up -d
 
 更多重启、更新、日志命令见 [docker-compose-deploy.yaml.md](docker-compose-deploy.yaml.md)。
 
-如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。`api.xxx.com` 可以用 nginx 或 Caddy 反向代理到 `http://127.0.0.1:8080`，nginx 示例见 `deploy/nginx-api.conf.example`。
+如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。`api.xxx.com` 可以用 nginx 或 Caddy 反向代理到 `http://127.0.0.1:18082`，nginx 示例见 `deploy/nginx-api.conf.example`。
 
 ## 数据库
 

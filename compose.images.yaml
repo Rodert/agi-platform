@@ -25,7 +25,7 @@ services:
       APP_ENV: prod
       APP_NAME: agi-platform
       HTTP_HOST: 0.0.0.0
-      HTTP_PORT: 8080
+      HTTP_PORT: ${SERVER_PORT:-18082}
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: root
@@ -46,7 +46,7 @@ services:
       COS_PUBLIC_BASE_URL: ${COS_PUBLIC_BASE_URL:-https://agi-platform-dev-1257142189.cos.ap-guangzhou.myqcloud.com}
       COS_UPLOAD_PREFIX: ${COS_UPLOAD_PREFIX:-}
     ports:
-      - "${SERVER_BIND:-127.0.0.1}:8080:8080"
+      - "${SERVER_BIND:-127.0.0.1}:${SERVER_PORT:-18082}:${SERVER_PORT:-18082}"
     volumes:
       - server-uploads:/app/uploads
     depends_on:
