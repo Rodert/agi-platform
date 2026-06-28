@@ -10,6 +10,8 @@ type Repositories struct {
 	Providers   ProviderRepository
 	ImageModels ImageModelRepository
 	ImageTasks  ImageTaskRepository
+	Videos      VideoRepository
+	Database    DatabaseRepository
 	Tx          TransactionManager
 }
 
@@ -22,6 +24,8 @@ func NewRepositories(db *gorm.DB) Repositories {
 		Providers:   NewGormProviderRepository(db),
 		ImageModels: NewGormImageModelRepository(db),
 		ImageTasks:  NewGormImageTaskRepository(db),
+		Videos:      NewGormVideoRepository(db),
+		Database:    NewGormDatabaseRepository(db),
 		Tx:          NewGormTransactionManager(db),
 	}
 }

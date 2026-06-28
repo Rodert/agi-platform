@@ -13,15 +13,31 @@ type ImageProvider interface {
 	Generate(ctx context.Context, req ImageRequest) (*ImageResult, error)
 }
 
+type VideoProvider interface {
+	Type() string
+	CreateVideo(ctx context.Context, req VideoRequest) (*VideoCreateResult, error)
+	GetVideo(ctx context.Context, req VideoStatusRequest) (*VideoStatusResult, error)
+	DownloadVideo(ctx context.Context, req VideoContentRequest) ([]byte, string, error)
+}
+
 type ImageRequest struct {
-	Model          string
-	Prompt         string
-	NegativePrompt string
-	Size           string
-	N              int
-	UserID         uint64
-	APIKey         string
-	Extra          map[string]interface{}
+	Model           string
+	Prompt          string
+	NegativePrompt  string
+	Size            string
+	N               int
+	UserID          uint64
+	BaseURL         string
+	APIKey          string
+	TimeoutSeconds  int
+	ReferenceImages []ReferenceImage
+	Extra           map[string]interface{}
+}
+
+type ReferenceImage struct {
+	URL      string
+	DataURL  string
+	Filename string
 }
 
 type ImageResult struct {
@@ -35,6 +51,51 @@ type ImageItem struct {
 	URL    string
 	Width  int
 	Height int
+}
+
+type VideoRequest struct {
+	Model          string
+	Prompt         string
+	Seconds        int
+	AspectRatio    string
+	Images         []string
+	Videos         []string
+	Audios         []string
+	UserID         uint64
+	BaseURL        string
+	APIKey         string
+	TimeoutSeconds int
+	Extra          map[string]interface{}
+}
+
+type VideoStatusRequest struct {
+	TaskID         string
+	BaseURL        string
+	APIKey         string
+	TimeoutSeconds int
+}
+
+type VideoContentRequest struct {
+	TaskID         string
+	BaseURL        string
+	APIKey         string
+	TimeoutSeconds int
+}
+
+type VideoCreateResult struct {
+	TaskID      string
+	Status      string
+	RawResponse string
+}
+
+type VideoStatusResult struct {
+	TaskID       string
+	Status       string
+	Progress     int
+	URL          string
+	ErrorCode    string
+	ErrorMessage string
+	RawResponse  string
 }
 
 type Registry struct {
@@ -63,4 +124,19 @@ func (r *Registry) Get(providerType string) (ImageProvider, error) {
 		return nil, ErrProviderNotFound
 	}
 	return provider, nil
+}
+
+func (r *Registry) GetVideo(providerType string) (VideoProvider, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	provider, ok := r.providers[providerType]
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+	videoProvider, ok := provider.(VideoProvider)
+	if !ok {
+		return nil, ErrProviderNotFound
+	}
+	return videoProvider, nil
 }

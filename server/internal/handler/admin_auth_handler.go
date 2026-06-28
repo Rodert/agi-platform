@@ -13,6 +13,8 @@ type AdminAuthHandler interface {
 	Login(c *gin.Context)
 	Me(c *gin.Context)
 	ListUsers(c *gin.Context)
+	CreateUser(c *gin.Context)
+	UpdateUser(c *gin.Context)
 	AdjustUserCredits(c *gin.Context)
 }
 
@@ -28,6 +30,15 @@ type adminLoginRequest struct {
 type adjustUserCreditsRequest struct {
 	Amount int64  `json:"amount" binding:"required"`
 	Remark string `json:"remark"`
+}
+
+type adminSaveUserRequest struct {
+	Email     string `json:"email" binding:"required"`
+	Phone     string `json:"phone"`
+	Password  string `json:"password"`
+	Nickname  string `json:"nickname"`
+	AvatarURL string `json:"avatar_url"`
+	Status    string `json:"status"`
 }
 
 func NewAdminAuthHandler(service service.AdminService) AdminAuthHandler {
@@ -73,6 +84,56 @@ func (h *adminAuthHandler) ListUsers(c *gin.Context) {
 		return
 	}
 	response.OK(c, users)
+}
+
+func (h *adminAuthHandler) CreateUser(c *gin.Context) {
+	var req adminSaveUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	user, err := h.service.CreateUser(c.Request.Context(), service.AdminSaveUserRequest{
+		Email:     req.Email,
+		Phone:     req.Phone,
+		Password:  req.Password,
+		Nickname:  req.Nickname,
+		AvatarURL: req.AvatarURL,
+		Status:    req.Status,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, user)
+}
+
+func (h *adminAuthHandler) UpdateUser(c *gin.Context) {
+	userID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req adminSaveUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	user, err := h.service.UpdateUser(c.Request.Context(), service.AdminSaveUserRequest{
+		UserID:    userID,
+		Email:     req.Email,
+		Phone:     req.Phone,
+		Password:  req.Password,
+		Nickname:  req.Nickname,
+		AvatarURL: req.AvatarURL,
+		Status:    req.Status,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, user)
 }
 
 func (h *adminAuthHandler) AdjustUserCredits(c *gin.Context) {

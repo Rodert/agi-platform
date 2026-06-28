@@ -16,10 +16,12 @@ type ImageModelRepository interface {
 	FindByCode(ctx context.Context, code string) (*model.ImageModel, error)
 	Create(ctx context.Context, imageModel *model.ImageModel) error
 	Update(ctx context.Context, id uint64, values map[string]interface{}) error
+	Delete(ctx context.Context, tx Tx, id uint64) error
 	PickRoute(ctx context.Context, modelID uint64) (*model.ImageModelRoute, error)
 	ListRoutes(ctx context.Context, modelID uint64) ([]model.ImageModelRoute, error)
 	CreateRoute(ctx context.Context, route *model.ImageModelRoute) error
 	UpdateRoute(ctx context.Context, id uint64, values map[string]interface{}) error
+	DeleteRoutesByModelID(ctx context.Context, tx Tx, modelID uint64) error
 }
 
 type GormImageModelRepository struct {
@@ -92,6 +94,19 @@ func (r *GormImageModelRepository) Update(ctx context.Context, id uint64, values
 	return nil
 }
 
+func (r *GormImageModelRepository) Delete(ctx context.Context, tx Tx, id uint64) error {
+	result := r.dbOrTx(tx).WithContext(ctx).
+		Where("id = ?", id).
+		Delete(&model.ImageModel{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *GormImageModelRepository) PickRoute(ctx context.Context, modelID uint64) (*model.ImageModelRoute, error) {
 	var route model.ImageModelRoute
 	err := r.db.WithContext(ctx).
@@ -132,4 +147,17 @@ func (r *GormImageModelRepository) UpdateRoute(ctx context.Context, id uint64, v
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *GormImageModelRepository) DeleteRoutesByModelID(ctx context.Context, tx Tx, modelID uint64) error {
+	return r.dbOrTx(tx).WithContext(ctx).
+		Where("model_id = ?", modelID).
+		Delete(&model.ImageModelRoute{}).Error
+}
+
+func (r *GormImageModelRepository) dbOrTx(tx Tx) *gorm.DB {
+	if db := dbFromTx(tx); db != nil {
+		return db
+	}
+	return r.db
 }

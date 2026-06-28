@@ -14,6 +14,8 @@ type AdminService interface {
 	Login(ctx context.Context, req AdminLoginRequest) (*AdminAuthResult, error)
 	Me(ctx context.Context, adminID uint64) (*model.AdminUser, error)
 	ListUsers(ctx context.Context, limit int, offset int) ([]model.User, error)
+	CreateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error)
+	UpdateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error)
 	AdjustUserCredits(ctx context.Context, req AdjustUserCreditsRequest) (*model.User, error)
 }
 
@@ -25,6 +27,16 @@ type AdminLoginRequest struct {
 type AdminAuthResult struct {
 	Admin model.AdminUser `json:"admin"`
 	Token *auth.Token     `json:"token"`
+}
+
+type AdminSaveUserRequest struct {
+	UserID    uint64
+	Email     string
+	Phone     string
+	Password  string
+	Nickname  string
+	AvatarURL string
+	Status    string
 }
 
 type AdjustUserCreditsRequest struct {
@@ -79,6 +91,78 @@ func (s *adminService) Me(ctx context.Context, adminID uint64) (*model.AdminUser
 func (s *adminService) ListUsers(ctx context.Context, limit int, offset int) ([]model.User, error) {
 	limit, offset = normalizePage(limit, offset)
 	return s.repos.Users.List(ctx, limit, offset)
+}
+
+func (s *adminService) CreateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error) {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" || len(req.Password) < 6 {
+		return nil, ErrInvalidRequest
+	}
+	if _, err := s.repos.Users.FindByEmail(ctx, email); err == nil {
+		return nil, ErrEmailAlreadyExists
+	} else if !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+
+	passwordHash, err := s.auth.HashPassword(req.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	user := &model.User{
+		Email:        &email,
+		Phone:        optionalString(req.Phone),
+		PasswordHash: passwordHash,
+		Nickname:     defaultNickname(req.Nickname, email),
+		AvatarURL:    strings.TrimSpace(req.AvatarURL),
+		Status:       normalizeUserStatus(req.Status),
+	}
+	if err := s.repos.Users.Create(ctx, nil, user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (s *adminService) UpdateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error) {
+	if req.UserID == 0 {
+		return nil, ErrInvalidRequest
+	}
+
+	user, err := s.repos.Users.FindByID(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	if email == "" {
+		return nil, ErrInvalidRequest
+	}
+	if existing, err := s.repos.Users.FindByEmail(ctx, email); err == nil && existing.ID != req.UserID {
+		return nil, ErrEmailAlreadyExists
+	} else if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+
+	user.Email = &email
+	user.Phone = optionalString(req.Phone)
+	user.Nickname = defaultNickname(req.Nickname, email)
+	user.AvatarURL = strings.TrimSpace(req.AvatarURL)
+	user.Status = normalizeUserStatus(req.Status)
+	if strings.TrimSpace(req.Password) != "" {
+		if len(req.Password) < 6 {
+			return nil, ErrInvalidRequest
+		}
+		passwordHash, err := s.auth.HashPassword(req.Password)
+		if err != nil {
+			return nil, err
+		}
+		user.PasswordHash = passwordHash
+	}
+
+	if err := s.repos.Users.Update(ctx, nil, user); err != nil {
+		return nil, err
+	}
+	return s.repos.Users.FindByID(ctx, req.UserID)
 }
 
 func (s *adminService) AdjustUserCredits(ctx context.Context, req AdjustUserCreditsRequest) (*model.User, error) {
@@ -138,4 +222,21 @@ func normalizePage(limit int, offset int) (int, int) {
 		offset = 0
 	}
 	return limit, offset
+}
+
+func optionalString(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func normalizeUserStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case "disabled":
+		return "disabled"
+	default:
+		return "active"
+	}
 }

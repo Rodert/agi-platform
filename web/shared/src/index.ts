@@ -76,6 +76,7 @@ export type ImageModelRoute = {
   id: number;
   model_id: number;
   provider_id: number;
+  provider_key_id?: number;
   provider_model_name: string;
   enabled: boolean;
   priority: number;
@@ -101,6 +102,7 @@ export type ImageTask = {
   model_id: number;
   source: string;
   prompt: string;
+  negative_prompt?: string;
   size: string;
   num_images: number;
   status: string;
@@ -110,9 +112,111 @@ export type ImageTask = {
   created_at: string;
 };
 
+export type WalletLog = {
+  id: number;
+  user_id: number;
+  type: string;
+  amount: number;
+  balance_before: number;
+  balance_after: number;
+  related_type: string;
+  related_id?: number;
+  remark: string;
+  operator_type: string;
+  operator_id?: number;
+  created_at: string;
+};
+
+export type VideoModel = {
+  id: number;
+  code: string;
+  display_name: string;
+  description: string;
+  price_credits: number;
+  supported_aspect_ratios: string[] | unknown;
+  supported_seconds: number[] | unknown;
+  enabled: boolean;
+  recommended: boolean;
+  sort_order: number;
+};
+
+export type VideoModelRoute = {
+  id: number;
+  model_id: number;
+  provider_id: number;
+  provider_key_id?: number;
+  provider_model_name: string;
+  enabled: boolean;
+  priority: number;
+  weight: number;
+  extra_config?: unknown;
+};
+
+export type VideoTask = {
+  id: number;
+  task_no: string;
+  user_id: number;
+  model_id: number;
+  source: string;
+  prompt: string;
+  seconds: number;
+  aspect_ratio: string;
+  images?: string[] | unknown;
+  videos?: string[] | unknown;
+  audios?: string[] | unknown;
+  status: string;
+  progress: number;
+  credits_used: number;
+  error_message: string;
+  created_at: string;
+};
+
+export type VideoAsset = {
+  id: number;
+  task_id: number;
+  user_id: number;
+  model_id: number;
+  url: string;
+  mime_type: string;
+  size_bytes?: number;
+  duration_seconds?: number;
+  status: string;
+};
+
+export type VideoTaskResult = {
+  task: VideoTask;
+  videos: VideoAsset[];
+};
+
 export type GenerateImageResult = {
   task: ImageTask;
   images: ImageAsset[];
+};
+
+export type DatabaseTable = {
+  name: string;
+  table_type: string;
+  rows: number;
+  comment: string;
+};
+
+export type DatabaseColumn = {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+  comment: string;
+};
+
+export type DatabaseTableData = {
+  table: string;
+  comment: string;
+  columns: DatabaseColumn[];
+  rows: Record<string, unknown>[];
+  ddl: string;
+  limit: number;
+  offset: number;
+  has_next: boolean;
 };
 
 export type ApiKey = {
@@ -175,9 +279,15 @@ export class ApiClient {
     return this.request<T>(path, { method: "DELETE" });
   }
 
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
+  upload<T>(path: string, formData: FormData): Promise<T> {
+    return this.request<T>(path, { method: "POST", body: formData }, false);
+  }
+
+  private async request<T>(path: string, init: RequestInit, json = true): Promise<T> {
     const headers = new Headers(init.headers);
-    headers.set("Content-Type", "application/json");
+    if (json) {
+      headers.set("Content-Type", "application/json");
+    }
     const token = this.getToken?.();
     if (token) {
       headers.set("Authorization", `Bearer ${token}`);

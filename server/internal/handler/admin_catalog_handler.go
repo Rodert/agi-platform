@@ -19,9 +19,18 @@ type AdminCatalogHandler interface {
 	ListImageModels(c *gin.Context)
 	CreateImageModel(c *gin.Context)
 	UpdateImageModel(c *gin.Context)
+	DeleteImageModel(c *gin.Context)
 	ListImageModelRoutes(c *gin.Context)
 	CreateImageModelRoute(c *gin.Context)
 	UpdateImageModelRoute(c *gin.Context)
+	ListVideoModels(c *gin.Context)
+	CreateVideoModel(c *gin.Context)
+	UpdateVideoModel(c *gin.Context)
+	DeleteVideoModel(c *gin.Context)
+	ListVideoModelRoutes(c *gin.Context)
+	CreateVideoModelRoute(c *gin.Context)
+	UpdateVideoModelRoute(c *gin.Context)
+	QueryUpstreamModels(c *gin.Context)
 }
 
 type adminCatalogHandler struct {
@@ -68,11 +77,39 @@ type imageModelRequest struct {
 
 type imageModelRouteRequest struct {
 	ProviderID        uint64                 `json:"provider_id" binding:"required"`
+	ProviderKeyID     *uint64                `json:"provider_key_id"`
 	ProviderModelName string                 `json:"provider_model_name" binding:"required"`
 	Enabled           bool                   `json:"enabled"`
 	Priority          int                    `json:"priority"`
 	Weight            int                    `json:"weight"`
 	ExtraConfig       map[string]interface{} `json:"extra_config"`
+}
+
+type videoModelRequest struct {
+	Code                  string   `json:"code" binding:"required"`
+	DisplayName           string   `json:"display_name" binding:"required"`
+	Description           string   `json:"description"`
+	PriceCredits          int64    `json:"price_credits"`
+	SupportedAspectRatios []string `json:"supported_aspect_ratios"`
+	SupportedSeconds      []int    `json:"supported_seconds"`
+	Enabled               bool     `json:"enabled"`
+	Recommended           bool     `json:"recommended"`
+	SortOrder             int      `json:"sort_order"`
+}
+
+type videoModelRouteRequest struct {
+	ProviderID        uint64                 `json:"provider_id" binding:"required"`
+	ProviderKeyID     *uint64                `json:"provider_key_id"`
+	ProviderModelName string                 `json:"provider_model_name" binding:"required"`
+	Enabled           bool                   `json:"enabled"`
+	Priority          int                    `json:"priority"`
+	Weight            int                    `json:"weight"`
+	ExtraConfig       map[string]interface{} `json:"extra_config"`
+}
+
+type queryUpstreamModelsRequest struct {
+	BaseURL string `json:"base_url" binding:"required"`
+	APIKey  string `json:"api_key" binding:"required"`
 }
 
 func NewAdminCatalogHandler(service service.AdminCatalogService) AdminCatalogHandler {
@@ -197,6 +234,18 @@ func (h *adminCatalogHandler) UpdateImageModel(c *gin.Context) {
 	response.OK(c, gin.H{"updated": true})
 }
 
+func (h *adminCatalogHandler) DeleteImageModel(c *gin.Context) {
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.service.DeleteImageModel(c.Request.Context(), id); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}
+
 func (h *adminCatalogHandler) ListImageModelRoutes(c *gin.Context) {
 	modelID, ok := parseUintParam(c, "id")
 	if !ok {
@@ -241,6 +290,115 @@ func (h *adminCatalogHandler) UpdateImageModelRoute(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"updated": true})
+}
+
+func (h *adminCatalogHandler) ListVideoModels(c *gin.Context) {
+	items, err := h.service.ListVideoModels(c.Request.Context(), queryInt(c, "limit", 20), queryInt(c, "offset", 0))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *adminCatalogHandler) CreateVideoModel(c *gin.Context) {
+	var req videoModelRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	item, err := h.service.CreateVideoModel(c.Request.Context(), service.VideoModelRequest(req))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+func (h *adminCatalogHandler) UpdateVideoModel(c *gin.Context) {
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req videoModelRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.service.UpdateVideoModel(c.Request.Context(), id, service.VideoModelRequest(req)); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"updated": true})
+}
+
+func (h *adminCatalogHandler) DeleteVideoModel(c *gin.Context) {
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.service.DeleteVideoModel(c.Request.Context(), id); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"deleted": true})
+}
+
+func (h *adminCatalogHandler) ListVideoModelRoutes(c *gin.Context) {
+	modelID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	items, err := h.service.ListVideoModelRoutes(c.Request.Context(), modelID)
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, items)
+}
+
+func (h *adminCatalogHandler) CreateVideoModelRoute(c *gin.Context) {
+	modelID, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req videoModelRouteRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	item, err := h.service.CreateVideoModelRoute(c.Request.Context(), modelID, service.VideoModelRouteRequest(req))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.Created(c, item)
+}
+
+func (h *adminCatalogHandler) UpdateVideoModelRoute(c *gin.Context) {
+	id, ok := parseUintParam(c, "id")
+	if !ok {
+		return
+	}
+	var req videoModelRouteRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	if err := h.service.UpdateVideoModelRoute(c.Request.Context(), id, service.VideoModelRouteRequest(req)); err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"updated": true})
+}
+
+func (h *adminCatalogHandler) QueryUpstreamModels(c *gin.Context) {
+	var req queryUpstreamModelsRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	items, err := h.service.QueryUpstreamModels(c.Request.Context(), service.QueryUpstreamModelsRequest(req))
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, items)
 }
 
 func bindJSON(c *gin.Context, dest interface{}) bool {

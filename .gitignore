@@ -4,3 +4,9 @@ dist/
 *.log
 *.err.log
 *.tsbuildinfo
+server/uploads/
+SecretKey.csv
+*SecretKey*.csv
+*.secret.csv
+apikey
+url

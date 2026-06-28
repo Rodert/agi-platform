@@ -3,6 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
 
 	"agi-platform/server/internal/model"
 	"agi-platform/server/internal/repository"
@@ -20,9 +26,18 @@ type AdminCatalogService interface {
 	ListImageModels(ctx context.Context, limit int, offset int) ([]model.ImageModel, error)
 	CreateImageModel(ctx context.Context, req ImageModelRequest) (*model.ImageModel, error)
 	UpdateImageModel(ctx context.Context, id uint64, req ImageModelRequest) error
+	DeleteImageModel(ctx context.Context, id uint64) error
 	ListImageModelRoutes(ctx context.Context, modelID uint64) ([]model.ImageModelRoute, error)
 	CreateImageModelRoute(ctx context.Context, modelID uint64, req ImageModelRouteRequest) (*model.ImageModelRoute, error)
 	UpdateImageModelRoute(ctx context.Context, id uint64, req ImageModelRouteRequest) error
+	ListVideoModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error)
+	CreateVideoModel(ctx context.Context, req VideoModelRequest) (*model.VideoModel, error)
+	UpdateVideoModel(ctx context.Context, id uint64, req VideoModelRequest) error
+	DeleteVideoModel(ctx context.Context, id uint64) error
+	ListVideoModelRoutes(ctx context.Context, modelID uint64) ([]model.VideoModelRoute, error)
+	CreateVideoModelRoute(ctx context.Context, modelID uint64, req VideoModelRouteRequest) (*model.VideoModelRoute, error)
+	UpdateVideoModelRoute(ctx context.Context, id uint64, req VideoModelRouteRequest) error
+	QueryUpstreamModels(ctx context.Context, req QueryUpstreamModelsRequest) ([]UpstreamModel, error)
 }
 
 type ProviderRequest struct {
@@ -65,11 +80,44 @@ type ImageModelRequest struct {
 
 type ImageModelRouteRequest struct {
 	ProviderID        uint64
+	ProviderKeyID     *uint64
 	ProviderModelName string
 	Enabled           bool
 	Priority          int
 	Weight            int
 	ExtraConfig       map[string]interface{}
+}
+
+type VideoModelRequest struct {
+	Code                  string
+	DisplayName           string
+	Description           string
+	PriceCredits          int64
+	SupportedAspectRatios []string
+	SupportedSeconds      []int
+	Enabled               bool
+	Recommended           bool
+	SortOrder             int
+}
+
+type VideoModelRouteRequest struct {
+	ProviderID        uint64
+	ProviderKeyID     *uint64
+	ProviderModelName string
+	Enabled           bool
+	Priority          int
+	Weight            int
+	ExtraConfig       map[string]interface{}
+}
+
+type QueryUpstreamModelsRequest struct {
+	BaseURL string
+	APIKey  string
+}
+
+type UpstreamModel struct {
+	ID     string `json:"id"`
+	Object string `json:"object,omitempty"`
 }
 
 type adminCatalogService struct {
@@ -219,6 +267,25 @@ func (s *adminCatalogService) UpdateImageModel(ctx context.Context, id uint64, r
 	})
 }
 
+func (s *adminCatalogService) DeleteImageModel(ctx context.Context, id uint64) error {
+	if id == 0 {
+		return ErrInvalidRequest
+	}
+	count, err := s.repos.ImageTasks.CountByModelID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: image model has tasks, disable it instead", ErrInvalidRequest)
+	}
+	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
+		if err := s.repos.ImageModels.DeleteRoutesByModelID(ctx, tx, id); err != nil {
+			return err
+		}
+		return s.repos.ImageModels.Delete(ctx, tx, id)
+	})
+}
+
 func (s *adminCatalogService) ListImageModelRoutes(ctx context.Context, modelID uint64) ([]model.ImageModelRoute, error) {
 	return s.repos.ImageModels.ListRoutes(ctx, modelID)
 }
@@ -234,6 +301,7 @@ func (s *adminCatalogService) CreateImageModelRoute(ctx context.Context, modelID
 	route := &model.ImageModelRoute{
 		ModelID:           modelID,
 		ProviderID:        req.ProviderID,
+		ProviderKeyID:     req.ProviderKeyID,
 		ProviderModelName: req.ProviderModelName,
 		Enabled:           req.Enabled,
 		Priority:          defaultInt(req.Priority, 100),
@@ -256,12 +324,214 @@ func (s *adminCatalogService) UpdateImageModelRoute(ctx context.Context, id uint
 	}
 	return s.repos.ImageModels.UpdateRoute(ctx, id, map[string]interface{}{
 		"provider_id":         req.ProviderID,
+		"provider_key_id":     req.ProviderKeyID,
 		"provider_model_name": req.ProviderModelName,
 		"enabled":             req.Enabled,
 		"priority":            defaultInt(req.Priority, 100),
 		"weight":              defaultInt(req.Weight, 100),
 		"extra_config":        datatypes.JSON(extra),
 	})
+}
+
+func (s *adminCatalogService) ListVideoModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error) {
+	limit, offset = normalizePage(limit, offset)
+	return s.repos.Videos.ListAllModels(ctx, limit, offset)
+}
+
+func (s *adminCatalogService) CreateVideoModel(ctx context.Context, req VideoModelRequest) (*model.VideoModel, error) {
+	if req.Code == "" || req.DisplayName == "" || req.PriceCredits < 0 {
+		return nil, ErrInvalidRequest
+	}
+	ratios, err := json.Marshal(req.SupportedAspectRatios)
+	if err != nil {
+		return nil, err
+	}
+	seconds, err := json.Marshal(req.SupportedSeconds)
+	if err != nil {
+		return nil, err
+	}
+	videoModel := &model.VideoModel{
+		Code:                  req.Code,
+		DisplayName:           req.DisplayName,
+		Description:           req.Description,
+		PriceCredits:          req.PriceCredits,
+		SupportedAspectRatios: datatypes.JSON(ratios),
+		SupportedSeconds:      datatypes.JSON(seconds),
+		Enabled:               req.Enabled,
+		Recommended:           req.Recommended,
+		SortOrder:             defaultInt(req.SortOrder, 100),
+	}
+	if err := s.repos.Videos.CreateModel(ctx, videoModel); err != nil {
+		return nil, err
+	}
+	return videoModel, nil
+}
+
+func (s *adminCatalogService) UpdateVideoModel(ctx context.Context, id uint64, req VideoModelRequest) error {
+	if id == 0 || req.Code == "" || req.DisplayName == "" || req.PriceCredits < 0 {
+		return ErrInvalidRequest
+	}
+	ratios, err := json.Marshal(req.SupportedAspectRatios)
+	if err != nil {
+		return err
+	}
+	seconds, err := json.Marshal(req.SupportedSeconds)
+	if err != nil {
+		return err
+	}
+	return s.repos.Videos.UpdateModel(ctx, id, map[string]interface{}{
+		"code":                    req.Code,
+		"display_name":            req.DisplayName,
+		"description":             req.Description,
+		"price_credits":           req.PriceCredits,
+		"supported_aspect_ratios": datatypes.JSON(ratios),
+		"supported_seconds":       datatypes.JSON(seconds),
+		"enabled":                 req.Enabled,
+		"recommended":             req.Recommended,
+		"sort_order":              defaultInt(req.SortOrder, 100),
+	})
+}
+
+func (s *adminCatalogService) DeleteVideoModel(ctx context.Context, id uint64) error {
+	if id == 0 {
+		return ErrInvalidRequest
+	}
+	count, err := s.repos.Videos.CountTasksByModelID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: video model has tasks, disable it instead", ErrInvalidRequest)
+	}
+	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
+		if err := s.repos.Videos.DeleteRoutesByModelID(ctx, tx, id); err != nil {
+			return err
+		}
+		return s.repos.Videos.DeleteModel(ctx, tx, id)
+	})
+}
+
+func (s *adminCatalogService) ListVideoModelRoutes(ctx context.Context, modelID uint64) ([]model.VideoModelRoute, error) {
+	return s.repos.Videos.ListRoutes(ctx, modelID)
+}
+
+func (s *adminCatalogService) CreateVideoModelRoute(ctx context.Context, modelID uint64, req VideoModelRouteRequest) (*model.VideoModelRoute, error) {
+	if modelID == 0 || req.ProviderID == 0 || req.ProviderModelName == "" {
+		return nil, ErrInvalidRequest
+	}
+	extra, err := json.Marshal(req.ExtraConfig)
+	if err != nil {
+		return nil, err
+	}
+	route := &model.VideoModelRoute{
+		ModelID:           modelID,
+		ProviderID:        req.ProviderID,
+		ProviderKeyID:     req.ProviderKeyID,
+		ProviderModelName: req.ProviderModelName,
+		Enabled:           req.Enabled,
+		Priority:          defaultInt(req.Priority, 100),
+		Weight:            defaultInt(req.Weight, 100),
+		ExtraConfig:       datatypes.JSON(extra),
+	}
+	if err := s.repos.Videos.CreateRoute(ctx, route); err != nil {
+		return nil, err
+	}
+	return route, nil
+}
+
+func (s *adminCatalogService) UpdateVideoModelRoute(ctx context.Context, id uint64, req VideoModelRouteRequest) error {
+	if id == 0 || req.ProviderID == 0 || req.ProviderModelName == "" {
+		return ErrInvalidRequest
+	}
+	extra, err := json.Marshal(req.ExtraConfig)
+	if err != nil {
+		return err
+	}
+	return s.repos.Videos.UpdateRoute(ctx, id, map[string]interface{}{
+		"provider_id":         req.ProviderID,
+		"provider_key_id":     req.ProviderKeyID,
+		"provider_model_name": req.ProviderModelName,
+		"enabled":             req.Enabled,
+		"priority":            defaultInt(req.Priority, 100),
+		"weight":              defaultInt(req.Weight, 100),
+		"extra_config":        datatypes.JSON(extra),
+	})
+}
+
+func (s *adminCatalogService) QueryUpstreamModels(ctx context.Context, req QueryUpstreamModelsRequest) ([]UpstreamModel, error) {
+	baseURL := strings.TrimSpace(req.BaseURL)
+	apiKey := strings.TrimSpace(req.APIKey)
+	if baseURL == "" || apiKey == "" {
+		return nil, ErrInvalidRequest
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, upstreamModelsEndpoint(baseURL), nil)
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	httpReq.Header.Set("Accept", "application/json")
+
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("upstream models request failed: status=%d body=%s", resp.StatusCode, truncateForAdmin(raw, 800))
+	}
+
+	var payload struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Object string `json:"object"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	if payload.Data == nil {
+		return nil, errors.New("upstream response did not include data")
+	}
+
+	models := make([]UpstreamModel, 0, len(payload.Data))
+	seen := map[string]struct{}{}
+	for _, item := range payload.Data {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		models = append(models, UpstreamModel{ID: id, Object: item.Object})
+	}
+	return models, nil
+}
+
+func upstreamModelsEndpoint(baseURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if strings.HasSuffix(trimmed, "/models") {
+		return trimmed
+	}
+	if strings.HasSuffix(trimmed, "/v1") {
+		return trimmed + "/models"
+	}
+	return trimmed + "/v1/models"
+}
+
+func truncateForAdmin(raw []byte, limit int) string {
+	value := string(raw)
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
 }
 
 func defaultInt(value int, fallback int) int {

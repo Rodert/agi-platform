@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	"agi-platform/server/internal/middleware"
 	"agi-platform/server/internal/response"
@@ -55,4 +56,30 @@ func requireCurrentAdminID(c *gin.Context) (uint64, bool) {
 		return 0, false
 	}
 	return adminID, true
+}
+
+func requestBaseURL(c *gin.Context) string {
+	proto := firstHeaderValue(c.GetHeader("X-Forwarded-Proto"))
+	if proto == "" {
+		if c.Request.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+	host := firstHeaderValue(c.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = c.Request.Host
+	}
+	if host == "" {
+		return ""
+	}
+	return strings.ToLower(proto) + "://" + host
+}
+
+func firstHeaderValue(value string) string {
+	if index := strings.Index(value, ","); index >= 0 {
+		value = value[:index]
+	}
+	return strings.TrimSpace(value)
 }

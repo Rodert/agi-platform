@@ -28,6 +28,7 @@ type ImageModelRoute struct {
 	ID                uint64         `gorm:"primaryKey;column:id" json:"id"`
 	ModelID           uint64         `gorm:"column:model_id" json:"model_id"`
 	ProviderID        uint64         `gorm:"column:provider_id" json:"provider_id"`
+	ProviderKeyID     *uint64        `gorm:"column:provider_key_id" json:"provider_key_id,omitempty"`
 	ProviderModelName string         `gorm:"column:provider_model_name" json:"provider_model_name"`
 	Enabled           bool           `gorm:"column:enabled" json:"enabled"`
 	Priority          int            `gorm:"column:priority" json:"priority"`

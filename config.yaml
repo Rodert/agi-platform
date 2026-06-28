@@ -1,0 +1,37 @@
+app:
+  env: local
+  name: agi-platform
+
+http:
+  host: 0.0.0.0
+  port: 8080
+
+database:
+  host: mysql
+  port: 3306
+  user: root
+  password: ""
+  name: agi_platform
+  charset: utf8mb4
+  parse_time: true
+  loc: Local
+  max_idle_conns: 10
+  max_open_conns: 50
+  conn_max_lifetime_seconds: 3600
+
+auth:
+  jwt_secret: local-dev-secret-change-me
+  jwt_expire_seconds: 604800
+  register_gift_credits: 100
+
+storage:
+  provider: cos
+  local_root: uploads
+  secret_csv_path: /app/SecretKey.csv
+  cos:
+    secret_id: ""
+    secret_key: ""
+    bucket: agi-platform-dev-1257142189
+    region: ap-guangzhou
+    public_base_url: https://agi-platform-dev-1257142189.cos.ap-guangzhou.myqcloud.com
+    upload_prefix: ""

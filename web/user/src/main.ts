@@ -6,7 +6,12 @@ import {
   type CreateApiKeyResult,
   type GenerateImageResult,
   type ImageModel,
+  type ImageTask,
   type User,
+  type VideoModel,
+  type VideoTask,
+  type VideoTaskResult,
+  type WalletLog,
   formatCredits,
   parseJSONList
 } from "@agi-platform/shared";
@@ -17,30 +22,87 @@ import {
   Eye,
   EyeOff,
   Image,
+  Film,
   KeyRound,
+  ListChecks,
   Loader2,
   LogOut,
+  ReceiptText,
   RefreshCw,
   Sparkles,
+  X,
   UserCircle
 } from "lucide-vue-next";
 import "./styles.css";
 
 const tokenKey = "agi_user_token";
 const storedToken = localStorage.getItem(tokenKey);
+const apiBaseURL =
+  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
+    "http://127.0.0.1:8080");
+const commonSizes = ["1K", "2K", "4K"];
+const openAIRatiosBySize: Record<string, string[]> = {
+  "1K": ["1:1"],
+  "2K": ["1:1", "3:2", "2:3"],
+  "4K": ["16:9", "9:16"]
+};
+const openAISizeMap: Record<string, Record<string, string>> = {
+  "1K": {
+    "1:1": "1024x1024"
+  },
+  "2K": {
+    "1:1": "2048x2048",
+    "3:2": "1536x1024",
+    "2:3": "1024x1536"
+  },
+  "4K": {
+    "16:9": "3840x2160",
+    "9:16": "2160x3840"
+  }
+};
 
 const state = reactive({
   token: storedToken,
   user: null as User | null,
   models: [] as ImageModel[],
+  videoModels: [] as VideoModel[],
   apiKeys: [] as ApiKey[],
+  tasks: [] as ImageTask[],
+  videoTasks: [] as VideoTask[],
+  walletLogs: [] as WalletLog[],
+  taskPage: 1,
+  taskPageSize: 20,
+  walletPage: 1,
+  walletPageSize: 20,
+  walletHasNext: false,
   result: null as GenerateImageResult | null,
+  selectedTask: null as GenerateImageResult | null,
+  videoResult: null as VideoTaskResult | null,
+  selectedVideoTask: null as VideoTaskResult | null,
+  previewAsset: null as { type: "image" | "video" | "audio"; url: string; title: string } | null,
   createdApiKey: "",
   loading: false,
   error: "",
   authMode: "login" as "login" | "register",
-  activeView: "create" as "create" | "keys" | "docs"
+  activeView: "create" as "create" | "video" | "tasks" | "taskDetail" | "videoDetail" | "wallet" | "keys" | "docs"
 });
+
+const menuViews = ["create", "video", "tasks", "wallet", "keys", "docs"] as const;
+type MenuView = (typeof menuViews)[number];
+
+type UploadReferenceResult = {
+  url: string;
+  filename: string;
+  mime_type: string;
+  size: number;
+};
+
+const videoReferenceLimits = {
+  image: 4,
+  video: 3,
+  audio: 1
+};
+const videoSecondOptions = [5, 10, 15];
 
 const authForm = reactive({
   email: "user@example.com",
@@ -51,9 +113,20 @@ const authForm = reactive({
 const generateForm = reactive({
   model: "general-high-quality",
   prompt: "一张科技感十足的 AI 芯片海报，蓝黑色背景，电影光效",
-  negative_prompt: "",
-  size: "1024x1024",
-  n: 1
+  resolution: "2K",
+  aspect_ratio: "1:1",
+  n: 1,
+  reference_images: ""
+});
+
+const videoForm = reactive({
+  model: "video-ds-2.0-fast",
+  prompt: "A cinematic 9:16 video of a cat running through warm sunlight",
+  seconds: 15,
+  aspect_ratio: "9:16",
+  images: "",
+  videos: "",
+  audios: ""
 });
 
 const keyForm = reactive({
@@ -68,9 +141,10 @@ const api = new ApiClient({
 });
 
 async function bootstrap() {
-  await loadModels();
+  await Promise.all([loadModels(), loadVideoModels()]);
   if (state.token) {
-    await Promise.allSettled([loadMe(), loadApiKeys()]);
+    await Promise.allSettled([loadMe(), loadApiKeys(), loadTasks(), loadVideoTasks(), loadWalletLogs()]);
+    await syncRouteFromURL();
   }
 }
 
@@ -81,12 +155,91 @@ async function loadModels() {
   }
 }
 
+async function loadVideoModels() {
+  state.videoModels = await api.get<VideoModel[]>("/api/video-models");
+  if (state.videoModels.length && !state.videoModels.find((model) => model.code === videoForm.model)) {
+    videoForm.model = state.videoModels[0].code;
+  }
+}
+
 async function loadMe() {
   state.user = await api.get<User>("/api/me");
 }
 
 async function loadApiKeys() {
   state.apiKeys = await api.get<ApiKey[]>("/api/api-keys");
+}
+
+async function loadTasks() {
+  const limit = state.taskPage * state.taskPageSize + 1;
+  state.tasks = await api.get<ImageTask[]>(`/api/images/tasks?limit=${limit}`);
+}
+
+async function loadTaskDetail(taskNo: string) {
+  state.selectedTask = await api.get<GenerateImageResult>(`/api/images/tasks/${taskNo}`);
+}
+
+async function loadVideoTasks() {
+  const limit = state.taskPage * state.taskPageSize + 1;
+  state.videoTasks = await api.get<VideoTask[]>(`/api/videos/tasks?limit=${limit}`);
+}
+
+async function loadVideoTaskDetail(taskNo: string) {
+  state.selectedVideoTask = await api.get<VideoTaskResult>(`/api/videos/tasks/${taskNo}`);
+}
+
+async function syncRouteFromURL() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  const taskNo = params.get("task_no");
+
+  if (view === "task" && taskNo) {
+    state.activeView = "taskDetail";
+    state.selectedVideoTask = null;
+    await loadTaskDetail(taskNo);
+    return;
+  }
+
+  if (view === "video_task" && taskNo) {
+    state.activeView = "videoDetail";
+    state.selectedTask = null;
+    await loadVideoTaskDetail(taskNo);
+    return;
+  }
+
+  if (isMenuView(view)) {
+    state.activeView = view;
+    state.selectedTask = null;
+    state.selectedVideoTask = null;
+    return;
+  }
+
+  state.activeView = "create";
+  state.selectedTask = null;
+  state.selectedVideoTask = null;
+}
+
+async function loadWalletLogs() {
+  const offset = (state.walletPage - 1) * state.walletPageSize;
+  const logs = await api.get<WalletLog[]>(`/api/wallet/logs?limit=${state.walletPageSize + 1}&offset=${offset}`);
+  state.walletHasNext = logs.length > state.walletPageSize;
+  state.walletLogs = logs.slice(0, state.walletPageSize);
+}
+
+async function refreshCurrentView() {
+  if (state.activeView === "tasks") {
+    await Promise.all([loadTasks(), loadVideoTasks()]);
+    return;
+  }
+  if (state.activeView === "wallet") {
+    await loadWalletLogs();
+    return;
+  }
+  if (state.activeView === "keys") {
+    await loadApiKeys();
+    return;
+  }
+  await loadMe();
 }
 
 async function submitAuth() {
@@ -100,7 +253,8 @@ async function submitAuth() {
     state.token = result.token.access_token;
     state.user = result.user;
     localStorage.setItem(tokenKey, state.token);
-    await loadApiKeys();
+    await Promise.all([loadApiKeys(), loadTasks(), loadVideoTasks(), loadWalletLogs()]);
+    await syncRouteFromURL();
   });
 }
 
@@ -109,11 +263,31 @@ async function generateImage() {
     state.result = await api.post<GenerateImageResult>("/api/images/generate", {
       model: generateForm.model,
       prompt: generateForm.prompt,
-      negative_prompt: generateForm.negative_prompt,
-      size: generateForm.size,
-      n: Number(generateForm.n)
+      size: requestSize(generateForm.resolution, generateForm.aspect_ratio),
+      n: Number(generateForm.n),
+      reference_images: buildReferenceImages()
     });
-    await loadMe();
+    state.selectedTask = state.result;
+    openTaskDetail(state.result.task.task_no, false);
+    await Promise.all([loadMe(), loadTasks(), loadWalletLogs()]);
+  });
+}
+
+async function generateVideo() {
+  await withLoading(async () => {
+    validateVideoReferences();
+    state.videoResult = await api.post<VideoTaskResult>("/api/videos/generate", {
+      model: videoForm.model,
+      prompt: videoForm.prompt,
+      seconds: Number(videoForm.seconds),
+      aspect_ratio: videoForm.aspect_ratio,
+      images: splitMediaList(videoForm.images),
+      videos: splitMediaList(videoForm.videos),
+      audios: splitMediaList(videoForm.audios)
+    });
+    state.selectedVideoTask = state.videoResult;
+    openVideoTaskDetail(state.videoResult.task.task_no, false);
+    await Promise.all([loadMe(), loadTasks(), loadVideoTasks(), loadWalletLogs()]);
   });
 }
 
@@ -148,10 +322,312 @@ function logout() {
   state.token = null;
   state.user = null;
   state.apiKeys = [];
+  state.tasks = [];
+  state.videoTasks = [];
+  state.walletLogs = [];
+  state.selectedTask = null;
+  state.selectedVideoTask = null;
+  state.previewAsset = null;
   localStorage.removeItem(tokenKey);
 }
 
 const selectedModel = computed(() => state.models.find((model) => model.code === generateForm.model));
+const selectedVideoModel = computed(() => state.videoModels.find((model) => model.code === videoForm.model));
+const availableRatios = computed(() => openAIRatiosBySize[generateForm.resolution] ?? openAIRatiosBySize["2K"]);
+const selectedRequestSize = computed(() => requestSize(generateForm.resolution, generateForm.aspect_ratio));
+const combinedTasks = computed(() =>
+  [
+    ...state.tasks.map((task) => ({
+      kind: "image" as const,
+      id: task.id,
+      task_no: task.task_no,
+      status: task.status,
+      meta: `${modelName(task.model_id)} · ${task.size || "-"} · ${task.num_images} 张`,
+      credits_used: task.credits_used,
+      created_at: task.created_at,
+      prompt: task.error_message || task.prompt,
+      detail_url: taskDetailURL(task.task_no)
+    })),
+    ...state.videoTasks.map((task) => ({
+      kind: "video" as const,
+      id: task.id,
+      task_no: task.task_no,
+      status: task.status,
+      meta: `${videoModelName(task.model_id)} · ${task.aspect_ratio || "-"} · ${task.seconds || 0}s`,
+      credits_used: task.credits_used,
+      created_at: task.created_at,
+      prompt: task.error_message || task.prompt,
+      detail_url: videoTaskDetailURL(task.task_no)
+    }))
+  ].sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+);
+const pagedTasks = computed(() => {
+  const start = (state.taskPage - 1) * state.taskPageSize;
+  return combinedTasks.value.slice(start, start + state.taskPageSize);
+});
+const taskHasNext = computed(() => combinedTasks.value.length > state.taskPage * state.taskPageSize);
+const taskRangeText = computed(() => {
+  if (!pagedTasks.value.length) return `第 ${state.taskPage} 页`;
+  const start = (state.taskPage - 1) * state.taskPageSize + 1;
+  return `${start}-${start + pagedTasks.value.length - 1}`;
+});
+const walletRangeText = computed(() => {
+  if (!state.walletLogs.length) return `第 ${state.walletPage} 页`;
+  const start = (state.walletPage - 1) * state.walletPageSize + 1;
+  return `${start}-${start + state.walletLogs.length - 1}`;
+});
+
+async function changeTaskPage(delta: number) {
+  const nextPage = state.taskPage + delta;
+  if (nextPage < 1 || (delta > 0 && !taskHasNext.value)) return;
+  state.taskPage = nextPage;
+  await Promise.all([loadTasks(), loadVideoTasks()]);
+}
+
+async function changeWalletPage(delta: number) {
+  const nextPage = state.walletPage + delta;
+  if (nextPage < 1 || (delta > 0 && !state.walletHasNext)) return;
+  state.walletPage = nextPage;
+  await loadWalletLogs();
+}
+
+async function uploadImageReferenceFile(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+  await withLoading(async () => {
+    const uploaded = await uploadReferenceFile(file, "image");
+    appendMediaValue("image", uploaded.url);
+  });
+}
+
+async function uploadVideoReferenceFile(event: Event, kind: "image" | "video" | "audio") {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file) {
+    return;
+  }
+  await withLoading(async () => {
+    const uploaded = await uploadReferenceFile(file, kind);
+    appendMediaValue(kind, uploaded.url);
+  });
+}
+
+async function uploadReferenceFile(file: File, kind: "image" | "video" | "audio") {
+  const formData = new FormData();
+  formData.set("kind", kind);
+  formData.set("file", file);
+  return api.upload<UploadReferenceResult>("/api/uploads/references", formData);
+}
+
+function appendMediaValue(kind: "image" | "video" | "audio", value: string) {
+  const key = kind === "image" ? "images" : kind === "video" ? "videos" : "audios";
+  if (kind === "image" && state.activeView === "create") {
+    generateForm.reference_images = appendListValue(generateForm.reference_images, value);
+    return;
+  }
+  ensureVideoReferenceCapacity(kind, 1);
+  videoForm[key] = appendListValue(videoForm[key], value);
+}
+
+function appendListValue(current: string, value: string) {
+  const trimmed = current.trim();
+  return trimmed ? `${trimmed}\n${value}` : value;
+}
+
+function removeImageReference(index: number) {
+  generateForm.reference_images = removeListItem(generateForm.reference_images, index);
+}
+
+function clearImageReferences() {
+  generateForm.reference_images = "";
+}
+
+function removeVideoReference(kind: "image" | "video" | "audio", index: number) {
+  const key = videoReferenceKey(kind);
+  videoForm[key] = removeListItem(videoForm[key], index);
+}
+
+function clearVideoReferences(kind: "image" | "video" | "audio") {
+  videoForm[videoReferenceKey(kind)] = "";
+}
+
+function removeListItem(value: string, index: number) {
+  return splitMediaList(value)
+    .filter((_, itemIndex) => itemIndex !== index)
+    .join("\n");
+}
+
+function videoReferenceKey(kind: "image" | "video" | "audio") {
+  return kind === "image" ? "images" : kind === "video" ? "videos" : "audios";
+}
+
+function validateVideoReferences() {
+  ensureVideoReferenceLimit("image", splitMediaList(videoForm.images).length);
+  ensureVideoReferenceLimit("video", splitMediaList(videoForm.videos).length);
+  ensureVideoReferenceLimit("audio", splitMediaList(videoForm.audios).length);
+}
+
+function ensureVideoReferenceCapacity(kind: "image" | "video" | "audio", adding: number) {
+  ensureVideoReferenceLimit(kind, splitMediaList(videoForm[videoReferenceKey(kind)]).length + adding);
+}
+
+function ensureVideoReferenceLimit(kind: "image" | "video" | "audio", count: number) {
+  const limit = videoReferenceLimits[kind];
+  if (count > limit) {
+    const label = kind === "image" ? "参考图片" : kind === "video" ? "参考视频" : "参考音频";
+    throw new Error(`${label}最多 ${limit} 个`);
+  }
+}
+
+function handleResolutionChange() {
+  if (!availableRatios.value.includes(generateForm.aspect_ratio)) {
+    generateForm.aspect_ratio = availableRatios.value[0] ?? "1:1";
+  }
+}
+
+function requestSize(resolution: string, ratio: string): string {
+  const sizeMap = openAISizeMap[resolution] ?? openAISizeMap["2K"];
+  return sizeMap[ratio] ?? Object.values(sizeMap)[0] ?? "2048x2048";
+}
+
+function buildReferenceImages(): Array<{ url?: string; data_url?: string; filename?: string }> {
+  return generateForm.reference_images
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((url) => ({ url }));
+}
+
+function splitMediaList(value: string): string[] {
+  return value
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function activeViewTitle() {
+  if (state.activeView === "create") return "AI 画图";
+  if (state.activeView === "video") return "AI 视频";
+  if (state.activeView === "tasks") return "任务记录";
+  if (state.activeView === "taskDetail") return "任务详情";
+  if (state.activeView === "videoDetail") return "视频详情";
+  if (state.activeView === "wallet") return "积分流水";
+  if (state.activeView === "keys") return "API Key";
+  return "API 接入";
+}
+
+function taskStatusText(status: string) {
+  const labels: Record<string, string> = {
+    pending: "排队中",
+    running: "生成中",
+    succeeded: "已完成",
+    failed: "失败",
+    timeout: "生成超时 24 小时"
+  };
+  return labels[status] ?? status;
+}
+
+function taskCanRefresh(status: string) {
+  return status === "pending" || status === "running";
+}
+
+function modelName(modelID: number) {
+  const model = state.models.find((item) => item.id === modelID);
+  return model?.display_name || `#${modelID}`;
+}
+
+function videoModelName(modelID: number) {
+  const model = state.videoModels.find((item) => item.id === modelID);
+  return model?.display_name || `#${modelID}`;
+}
+
+function walletTypeText(type: string) {
+  const labels: Record<string, string> = {
+    consume: "生成消费",
+    refund: "失败退款",
+    admin_add: "管理员增加",
+    admin_deduct: "管理员扣减",
+    register_gift: "注册赠送"
+  };
+  return labels[type] ?? type;
+}
+
+function signedCredits(value: number) {
+  return `${value > 0 ? "+" : ""}${value} 积分`;
+}
+
+function formatDateTime(value: string) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function imageUrl(value: string) {
+  if (!value || value.startsWith("http://") || value.startsWith("https://") || value.startsWith("data:")) {
+    return value;
+  }
+  if (value.startsWith("/")) {
+    return `${apiBaseURL}${value}`;
+  }
+  return value;
+}
+
+function openImagePreview(url: string, alt: string) {
+  openAssetPreview("image", url, alt);
+}
+
+function openAssetPreview(type: "image" | "video" | "audio", url: string, title: string) {
+  state.previewAsset = { type, url: imageUrl(url), title };
+}
+
+function closeAssetPreview() {
+  state.previewAsset = null;
+}
+
+function openTaskDetail(taskNo: string, replace = false) {
+  state.activeView = "taskDetail";
+  updateBrowserURL(taskDetailURL(taskNo), replace);
+}
+
+function openVideoTaskDetail(taskNo: string, replace = false) {
+  state.activeView = "videoDetail";
+  updateBrowserURL(videoTaskDetailURL(taskNo), replace);
+}
+
+function updateBrowserURL(url: string, replace = false) {
+  if (window.location.href === url) {
+    return;
+  }
+  const method = replace ? "replaceState" : "pushState";
+  window.history[method]({}, "", url);
+}
+
+function setActiveView(view: MenuView) {
+  state.activeView = view;
+  state.selectedTask = null;
+  state.selectedVideoTask = null;
+  updateBrowserURL(menuViewURL(view));
+}
+
+function isMenuView(view: string | null): view is MenuView {
+  return menuViews.includes(view as MenuView);
+}
+
+function menuViewURL(view: MenuView) {
+  return `${window.location.origin}${window.location.pathname}?view=${encodeURIComponent(view)}`;
+}
+
+function taskDetailURL(taskNo: string) {
+  return `${window.location.origin}${window.location.pathname}?view=task&task_no=${encodeURIComponent(taskNo)}`;
+}
+
+function videoTaskDetailURL(taskNo: string) {
+  return `${window.location.origin}${window.location.pathname}?view=video_task&task_no=${encodeURIComponent(taskNo)}`;
+}
 
 const App = {
   components: {
@@ -160,12 +636,16 @@ const App = {
     Code2,
     Eye,
     EyeOff,
+    Film,
     Image,
     KeyRound,
+    ListChecks,
     Loader2,
     LogOut,
+    ReceiptText,
     RefreshCw,
     Sparkles,
+    X,
     UserCircle
   },
   setup() {
@@ -174,16 +654,59 @@ const App = {
       state,
       authForm,
       generateForm,
+      videoForm,
       keyForm,
       showPassword,
       selectedModel,
+      selectedVideoModel,
+      combinedTasks,
+      pagedTasks,
+      taskHasNext,
+      taskRangeText,
+      walletRangeText,
+      commonSizes,
+      videoSecondOptions,
+      availableRatios,
+      selectedRequestSize,
       formatCredits,
       parseJSONList,
       loadMe,
+      loadTasks,
+      loadTaskDetail,
+      loadVideoTasks,
+      loadVideoTaskDetail,
+      loadWalletLogs,
+      changeTaskPage,
+      changeWalletPage,
+      refreshCurrentView,
+      activeViewTitle,
+      taskStatusText,
+      taskCanRefresh,
+      modelName,
+      videoModelName,
+      walletTypeText,
+      signedCredits,
+      formatDateTime,
+      imageUrl,
+      taskDetailURL,
+      videoTaskDetailURL,
+      setActiveView,
+      splitMediaList,
+      openImagePreview,
+      openAssetPreview,
+      closeAssetPreview,
       submitAuth,
       generateImage,
+      generateVideo,
       createApiKey,
       revokeApiKey,
+      uploadImageReferenceFile,
+      uploadVideoReferenceFile,
+      removeImageReference,
+      clearImageReferences,
+      removeVideoReference,
+      clearVideoReferences,
+      handleResolutionChange,
       logout
     };
   },
@@ -198,13 +721,22 @@ const App = {
           </div>
         </div>
 
-        <button class="nav-item" :class="{ active: state.activeView === 'create' }" @click="state.activeView = 'create'">
+        <button class="nav-item" :class="{ active: state.activeView === 'create' }" @click="setActiveView('create')">
           <Brush :size="18" /> AI 画图
         </button>
-        <button class="nav-item" :class="{ active: state.activeView === 'keys' }" @click="state.activeView = 'keys'">
+        <button class="nav-item" :class="{ active: state.activeView === 'video' }" @click="setActiveView('video')">
+          <Film :size="18" /> AI 视频
+        </button>
+        <button class="nav-item" :class="{ active: state.activeView === 'tasks' }" @click="setActiveView('tasks')">
+          <ListChecks :size="18" /> 任务记录
+        </button>
+        <button class="nav-item" :class="{ active: state.activeView === 'wallet' }" @click="setActiveView('wallet')">
+          <ReceiptText :size="18" /> 积分流水
+        </button>
+        <button class="nav-item" :class="{ active: state.activeView === 'keys' }" @click="setActiveView('keys')">
           <KeyRound :size="18" /> API Key
         </button>
-        <button class="nav-item" :class="{ active: state.activeView === 'docs' }" @click="state.activeView = 'docs'">
+        <button class="nav-item" :class="{ active: state.activeView === 'docs' }" @click="setActiveView('docs')">
           <Code2 :size="18" /> API 接入
         </button>
 
@@ -254,10 +786,10 @@ const App = {
         <template v-else>
           <header class="topbar">
             <div>
-              <h1>{{ state.activeView === 'create' ? 'AI 画图' : state.activeView === 'keys' ? 'API Key' : 'API 接入' }}</h1>
+              <h1>{{ activeViewTitle() }}</h1>
               <p>{{ state.user.email }} · {{ formatCredits(state.user.credits) }}</p>
             </div>
-            <button class="ghost-button" @click="loadMe"><RefreshCw :size="16" />刷新余额</button>
+            <button class="ghost-button" @click="refreshCurrentView"><RefreshCw :size="16" />刷新</button>
           </header>
 
           <p v-if="state.error" class="error">{{ state.error }}</p>
@@ -278,44 +810,344 @@ const App = {
               <label>提示词
                 <textarea v-model="generateForm.prompt" rows="7" />
               </label>
-              <label>反向提示词
-                <input v-model="generateForm.negative_prompt" />
+              <label>参考图上传
+                <span class="upload-row">
+                  <input type="file" accept="image/*" @change="uploadImageReferenceFile" />
+                </span>
               </label>
+              <div v-if="splitMediaList(generateForm.reference_images).length" class="reference-list">
+                <div class="reference-list-heading">
+                  <span>已上传参考图 {{ splitMediaList(generateForm.reference_images).length }} 张</span>
+                  <button class="ghost-button small-button" type="button" @click="clearImageReferences">清空</button>
+                </div>
+                <div v-for="(item, index) in splitMediaList(generateForm.reference_images)" :key="item" class="reference-item">
+                  <span>第 {{ index + 1 }} 个</span>
+                  <div class="reference-actions">
+                    <button class="ghost-button small-button" type="button" @click="openAssetPreview('image', item, '参考图 ' + (index + 1))">预览</button>
+                    <button class="ghost-button small-button" type="button" @click="removeImageReference(index)">删除</button>
+                  </div>
+                </div>
+              </div>
               <div class="inline-grid">
-                <label>尺寸
-                  <select v-model="generateForm.size">
-                    <option v-for="size in parseJSONList(selectedModel?.supported_sizes)" :key="size" :value="size">{{ size }}</option>
-                    <option v-if="!parseJSONList(selectedModel?.supported_sizes).length" value="1024x1024">1024x1024</option>
+                <label>清晰度
+                  <select v-model="generateForm.resolution" @change="handleResolutionChange">
+                    <option v-for="size in commonSizes" :key="size" :value="size">{{ size }}</option>
+                  </select>
+                </label>
+                <label>比例
+                  <select v-model="generateForm.aspect_ratio">
+                    <option v-for="ratio in availableRatios" :key="ratio" :value="ratio">{{ ratio }}</option>
                   </select>
                 </label>
                 <label>数量
                   <input v-model.number="generateForm.n" type="number" min="1" :max="selectedModel?.max_images_per_request || 4" />
                 </label>
               </div>
+              <div class="request-size-line">请求尺寸：{{ selectedRequestSize }}</div>
               <button class="primary-button" @click="generateImage" :disabled="state.loading">
-                <Loader2 v-if="state.loading" class="spin" :size="17" /> 生成图片
+                <Loader2 v-if="state.loading" class="spin" :size="17" /> 提交任务
               </button>
             </section>
 
             <section class="panel result-panel">
               <div class="empty-result" v-if="!state.result">
                 <Image :size="40" />
-                <span>生成结果会显示在这里</span>
+                <span>提交后可在任务记录查看进度和结果</span>
               </div>
               <div v-else>
                 <div class="task-line">
                   <strong>{{ state.result.task.task_no }}</strong>
-                  <span>{{ state.result.task.status }} · 消耗 {{ state.result.task.credits_used }} 积分</span>
+                  <span>{{ taskStatusText(state.result.task.status) }} · 消耗 {{ state.result.task.credits_used }} 积分</span>
                 </div>
-                <div class="image-grid">
+                <div v-if="!state.result.images.length" class="empty-result compact-empty">
+                  <Loader2 v-if="taskCanRefresh(state.result.task.status)" class="spin" :size="28" />
+                  <span>{{ taskCanRefresh(state.result.task.status) ? '任务已提交，后台正在生成' : '暂无图片' }}</span>
+                </div>
+                <div v-else class="image-grid">
                   <article v-for="image in state.result.images" :key="image.id" class="image-card">
-                    <img :src="image.url" :alt="state.result.task.prompt" />
-                    <a :href="image.url" target="_blank" rel="noreferrer"><ArrowDownToLine :size="16" /> 打开图片</a>
+                    <button class="image-preview-button" type="button" @click="openImagePreview(image.url, state.result.task.prompt)">
+                      <img :src="imageUrl(image.url)" :alt="state.result.task.prompt" />
+                    </button>
+                    <a :href="imageUrl(image.url)" target="_blank" rel="noreferrer"><ArrowDownToLine :size="16" /> 打开图片</a>
                   </article>
                 </div>
               </div>
             </section>
           </div>
+
+          <div v-if="state.activeView === 'video'" class="workspace">
+            <section class="panel controls">
+              <label>模型
+                <select v-model="videoForm.model">
+                  <option v-for="model in state.videoModels" :key="model.id" :value="model.code">
+                    {{ model.display_name }} · {{ model.price_credits }} 积分/次
+                  </option>
+                </select>
+              </label>
+              <div class="model-hint" v-if="selectedVideoModel">
+                <strong>{{ selectedVideoModel.display_name }}</strong>
+                <span>{{ selectedVideoModel.description }}</span>
+              </div>
+              <label>提示词
+                <textarea v-model="videoForm.prompt" rows="7" />
+              </label>
+              <div class="inline-grid">
+                <label>时长
+                  <select v-model.number="videoForm.seconds">
+                    <option v-for="seconds in videoSecondOptions" :key="seconds" :value="seconds">{{ seconds }} 秒</option>
+                  </select>
+                </label>
+                <label>比例
+                  <select v-model="videoForm.aspect_ratio">
+                    <option value="9:16">9:16</option>
+                    <option value="16:9">16:9</option>
+                    <option value="1:1">1:1</option>
+                  </select>
+                </label>
+              </div>
+              <label>参考图片
+                <span class="limit-line">已上传 {{ splitMediaList(videoForm.images).length }}/4</span>
+                <span class="upload-row">
+                  <input type="file" accept="image/*" :disabled="splitMediaList(videoForm.images).length >= 4" @change="uploadVideoReferenceFile($event, 'image')" />
+                </span>
+                <div v-if="splitMediaList(videoForm.images).length" class="reference-list">
+                  <div class="reference-list-heading">
+                    <span>{{ splitMediaList(videoForm.images).length }} 个参考图片已就绪</span>
+                    <button class="ghost-button small-button" type="button" @click="clearVideoReferences('image')">清空</button>
+                  </div>
+                  <div v-for="(item, index) in splitMediaList(videoForm.images)" :key="item" class="reference-item">
+                    <span>第 {{ index + 1 }} 个</span>
+                    <div class="reference-actions">
+                      <button class="ghost-button small-button" type="button" @click="openAssetPreview('image', item, '参考图片 ' + (index + 1))">预览</button>
+                      <button class="ghost-button small-button" type="button" @click="removeVideoReference('image', index)">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </label>
+              <label>参考视频
+                <span class="limit-line">已上传 {{ splitMediaList(videoForm.videos).length }}/3</span>
+                <span class="upload-row">
+                  <input type="file" accept="video/*" :disabled="splitMediaList(videoForm.videos).length >= 3" @change="uploadVideoReferenceFile($event, 'video')" />
+                </span>
+                <div v-if="splitMediaList(videoForm.videos).length" class="reference-list">
+                  <div class="reference-list-heading">
+                    <span>{{ splitMediaList(videoForm.videos).length }} 个参考视频已就绪</span>
+                    <button class="ghost-button small-button" type="button" @click="clearVideoReferences('video')">清空</button>
+                  </div>
+                  <div v-for="(item, index) in splitMediaList(videoForm.videos)" :key="item" class="reference-item">
+                    <span>第 {{ index + 1 }} 个</span>
+                    <div class="reference-actions">
+                      <button class="ghost-button small-button" type="button" @click="openAssetPreview('video', item, '参考视频 ' + (index + 1))">预览</button>
+                      <button class="ghost-button small-button" type="button" @click="removeVideoReference('video', index)">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </label>
+              <label>参考音频
+                <span class="limit-line">已上传 {{ splitMediaList(videoForm.audios).length }}/1</span>
+                <span class="upload-row">
+                  <input type="file" accept="audio/*" :disabled="splitMediaList(videoForm.audios).length >= 1" @change="uploadVideoReferenceFile($event, 'audio')" />
+                </span>
+                <div v-if="splitMediaList(videoForm.audios).length" class="reference-list">
+                  <div class="reference-list-heading">
+                    <span>{{ splitMediaList(videoForm.audios).length }} 个参考音频已就绪</span>
+                    <button class="ghost-button small-button" type="button" @click="clearVideoReferences('audio')">清空</button>
+                  </div>
+                  <div v-for="(item, index) in splitMediaList(videoForm.audios)" :key="item" class="reference-item">
+                    <span>第 {{ index + 1 }} 个</span>
+                    <div class="reference-actions">
+                      <button class="ghost-button small-button" type="button" @click="openAssetPreview('audio', item, '参考音频 ' + (index + 1))">预览</button>
+                      <button class="ghost-button small-button" type="button" @click="removeVideoReference('audio', index)">删除</button>
+                    </div>
+                  </div>
+                </div>
+              </label>
+              <button class="primary-button" @click="generateVideo" :disabled="state.loading">
+                <Loader2 v-if="state.loading" class="spin" :size="17" /> 提交视频任务
+              </button>
+            </section>
+
+            <section class="panel result-panel">
+              <div class="empty-result" v-if="!state.videoResult">
+                <Film :size="40" />
+                <span>提交后可在任务记录查看进度和结果</span>
+              </div>
+              <div v-else>
+                <div class="task-line">
+                  <strong>{{ state.videoResult.task.task_no }}</strong>
+                  <span>{{ taskStatusText(state.videoResult.task.status) }} · 消耗 {{ state.videoResult.task.credits_used }} 积分</span>
+                </div>
+                <div class="empty-result compact-empty">
+                  <Loader2 v-if="taskCanRefresh(state.videoResult.task.status)" class="spin" :size="28" />
+                  <span>{{ taskCanRefresh(state.videoResult.task.status) ? '视频任务已提交，后台正在生成' : '请到任务记录查看结果' }}</span>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section v-if="state.activeView === 'tasks'" class="panel list-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>我的生成任务</h2>
+                <p>这里会记录你在网页端发起的图片和视频生成任务，包括状态、消耗积分和请求参数。</p>
+              </div>
+              <button class="ghost-button" @click="refreshCurrentView"><RefreshCw :size="16" />刷新</button>
+            </div>
+            <div v-if="!combinedTasks.length" class="empty-state">
+              <ListChecks :size="36" />
+              <span>还没有任务记录</span>
+            </div>
+            <div v-else class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>任务号</th>
+                    <th>状态</th>
+                    <th>参数</th>
+                    <th>积分</th>
+                    <th>创建时间</th>
+                    <th>提示词</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="task in pagedTasks" :key="task.kind + '-' + task.id">
+                    <td>{{ task.kind === 'image' ? '图片' : '视频' }}</td>
+                    <td class="mono-cell">{{ task.task_no }}</td>
+                    <td><span class="status-pill" :class="task.status">{{ taskStatusText(task.status) }}</span></td>
+                    <td>{{ task.meta }}</td>
+                    <td>{{ formatCredits(task.credits_used) }}</td>
+                    <td class="muted-cell">{{ formatDateTime(task.created_at) }}</td>
+                    <td class="prompt-cell" :title="task.prompt">{{ task.prompt }}</td>
+                    <td><a class="ghost-button small-button" :href="task.detail_url" target="_blank" rel="noreferrer">查看</a></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <span>当前 {{ taskRangeText }}</span>
+                <div>
+                  <button class="ghost-button small-button" :disabled="state.taskPage <= 1" @click="changeTaskPage(-1)">上一页</button>
+                  <span class="page-number">第 {{ state.taskPage }} 页</span>
+                  <button class="ghost-button small-button" :disabled="!taskHasNext" @click="changeTaskPage(1)">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="state.activeView === 'taskDetail'" class="panel list-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>任务详情</h2>
+                <p v-if="state.selectedTask">{{ state.selectedTask.task.task_no }} · {{ taskStatusText(state.selectedTask.task.status) }}</p>
+              </div>
+              <button v-if="state.selectedTask" class="ghost-button" @click="loadTaskDetail(state.selectedTask.task.task_no)"><RefreshCw :size="16" />刷新任务</button>
+            </div>
+            <div v-if="!state.selectedTask" class="empty-state compact-empty">
+              <Loader2 class="spin" :size="28" />
+              <span>正在加载任务</span>
+            </div>
+            <div v-else class="task-detail standalone-detail">
+              <div class="task-line">
+                <strong>{{ state.selectedTask.task.task_no }}</strong>
+                <span>{{ taskStatusText(state.selectedTask.task.status) }} · {{ state.selectedTask.task.progress }}% · 消耗 {{ state.selectedTask.task.credits_used }} 积分</span>
+              </div>
+              <p class="prompt-detail">{{ state.selectedTask.task.prompt }}</p>
+              <p v-if="state.selectedTask.task.error_message" class="error">{{ state.selectedTask.task.error_message }}</p>
+              <div v-if="!state.selectedTask.images.length" class="empty-state compact-empty">
+                <Loader2 v-if="taskCanRefresh(state.selectedTask.task.status)" class="spin" :size="28" />
+                <span>{{ taskCanRefresh(state.selectedTask.task.status) ? '后台生成中，稍后刷新查看' : '这个任务没有图片结果' }}</span>
+              </div>
+              <div v-else class="image-grid">
+                <article v-for="image in state.selectedTask.images" :key="image.id" class="image-card">
+                  <button class="image-preview-button" type="button" @click="openImagePreview(image.url, state.selectedTask.task.prompt)">
+                    <img :src="imageUrl(image.url)" :alt="state.selectedTask.task.prompt" />
+                  </button>
+                  <a :href="imageUrl(image.url)" target="_blank" rel="noreferrer"><ArrowDownToLine :size="16" /> 打开图片</a>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="state.activeView === 'videoDetail'" class="panel list-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>视频详情</h2>
+                <p v-if="state.selectedVideoTask">{{ state.selectedVideoTask.task.task_no }} · {{ taskStatusText(state.selectedVideoTask.task.status) }}</p>
+              </div>
+              <button v-if="state.selectedVideoTask" class="ghost-button" @click="loadVideoTaskDetail(state.selectedVideoTask.task.task_no)"><RefreshCw :size="16" />刷新任务</button>
+            </div>
+            <div v-if="!state.selectedVideoTask" class="empty-state compact-empty">
+              <Loader2 class="spin" :size="28" />
+              <span>正在加载视频任务</span>
+            </div>
+            <div v-else class="task-detail standalone-detail">
+              <div class="task-line">
+                <strong>{{ state.selectedVideoTask.task.task_no }}</strong>
+                <span>{{ taskStatusText(state.selectedVideoTask.task.status) }} · {{ state.selectedVideoTask.task.progress }}% · 消耗 {{ state.selectedVideoTask.task.credits_used }} 积分</span>
+              </div>
+              <p class="prompt-detail">{{ state.selectedVideoTask.task.prompt }}</p>
+              <p v-if="state.selectedVideoTask.task.error_message" class="error">{{ state.selectedVideoTask.task.error_message }}</p>
+              <div v-if="!state.selectedVideoTask.videos.length" class="empty-state compact-empty">
+                <Loader2 v-if="taskCanRefresh(state.selectedVideoTask.task.status)" class="spin" :size="28" />
+                <span>{{ taskCanRefresh(state.selectedVideoTask.task.status) ? '后台生成中，稍后刷新查看' : '这个任务没有视频结果' }}</span>
+              </div>
+              <div v-else class="video-result-list">
+                <article v-for="video in state.selectedVideoTask.videos" :key="video.id" class="video-card">
+                  <video :src="imageUrl(video.url)" controls playsinline />
+                  <a :href="imageUrl(video.url)" target="_blank" rel="noreferrer"><ArrowDownToLine :size="16" /> 下载/打开 MP4</a>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section v-if="state.activeView === 'wallet'" class="panel list-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>积分流水</h2>
+                <p>这里会记录积分增加、扣减、生成消费和失败退款。</p>
+              </div>
+              <button class="ghost-button" @click="loadWalletLogs"><RefreshCw :size="16" />刷新</button>
+            </div>
+            <div v-if="!state.walletLogs.length" class="empty-state">
+              <ReceiptText :size="36" />
+              <span>还没有积分记录</span>
+            </div>
+            <div v-else class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>时间</th>
+                    <th>类型</th>
+                    <th>变动</th>
+                    <th>变动前</th>
+                    <th>变动后</th>
+                    <th>关联</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="log in state.walletLogs" :key="log.id">
+                    <td class="muted-cell">{{ formatDateTime(log.created_at) }}</td>
+                    <td>{{ walletTypeText(log.type) }}</td>
+                    <td class="amount-cell" :class="{ positive: log.amount > 0, negative: log.amount < 0 }">{{ signedCredits(log.amount) }}</td>
+                    <td>{{ formatCredits(log.balance_before) }}</td>
+                    <td>{{ formatCredits(log.balance_after) }}</td>
+                    <td>{{ log.related_type || '-' }}<span v-if="log.related_id"> #{{ log.related_id }}</span></td>
+                    <td class="prompt-cell" :title="log.remark">{{ log.remark || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="pagination-bar">
+                <span>当前 {{ walletRangeText }}</span>
+                <div>
+                  <button class="ghost-button small-button" :disabled="state.walletPage <= 1" @click="changeWalletPage(-1)">上一页</button>
+                  <span class="page-number">第 {{ state.walletPage }} 页</span>
+                  <button class="ghost-button small-button" :disabled="!state.walletHasNext" @click="changeWalletPage(1)">下一页</button>
+                </div>
+              </div>
+            </div>
+          </section>
 
           <section v-if="state.activeView === 'keys'" class="panel list-panel">
             <div class="toolbar">
@@ -346,13 +1178,32 @@ Authorization: Bearer agi_xxx
   "model": "general-high-quality",
   "prompt": "一张科技感海报",
   "size": "1024x1024",
-  "n": 1
+  "n": 1,
+  "reference_images": [{"url": "https://example.com/reference.png"}]
 }</pre>
           </section>
         </template>
       </section>
+
+      <div v-if="state.previewAsset" class="preview-backdrop" @click.self="closeAssetPreview">
+        <div class="preview-panel">
+          <button class="preview-close" type="button" aria-label="关闭预览" @click="closeAssetPreview"><X :size="20" /></button>
+          <img v-if="state.previewAsset.type === 'image'" :src="state.previewAsset.url" :alt="state.previewAsset.title" />
+          <video v-else-if="state.previewAsset.type === 'video'" :src="state.previewAsset.url" controls autoplay playsinline />
+          <div v-else class="audio-preview">
+            <strong>{{ state.previewAsset.title }}</strong>
+            <audio :src="state.previewAsset.url" controls autoplay />
+          </div>
+        </div>
+      </div>
     </main>
   `
 };
 
 createApp(App).mount("#app");
+
+window.addEventListener("popstate", () => {
+  if (state.token) {
+    void syncRouteFromURL();
+  }
+});

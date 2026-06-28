@@ -23,17 +23,7 @@ services:
     working_dir: /app/server
     command: go run -buildvcs=false ./cmd/server
     environment:
-      APP_ENV: local
-      HTTP_HOST: 0.0.0.0
-      HTTP_PORT: 8080
-      JWT_SECRET: local-dev-secret-change-me
-      JWT_EXPIRE_SECONDS: 604800
-      REGISTER_GIFT_CREDITS: 100
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: root
-      MYSQL_PASSWORD: ""
-      MYSQL_DATABASE: agi_platform
+      CONFIG_PATH: /app/config.yaml
     ports:
       - "8080:8080"
     volumes:

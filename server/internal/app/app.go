@@ -11,6 +11,7 @@ import (
 	"agi-platform/server/internal/repository"
 	"agi-platform/server/internal/router"
 	"agi-platform/server/internal/service"
+	"agi-platform/server/internal/storage"
 )
 
 func Run() error {
@@ -24,18 +25,22 @@ func Run() error {
 	repos := repository.NewRepositories(db)
 	providers := provider.NewRegistry()
 	providers.Register(provider.NewMockProvider())
+	providers.Register(provider.NewOpenAICompatibleProvider("openai-compatible"))
+	providers.Register(provider.NewOpenAICompatibleProvider("openai"))
 	authManager := auth.NewManager(auth.Config{
 		JWTSecret:     cfg.Auth.JWTSecret,
 		TokenLifetime: cfg.Auth.TokenLifetime,
 	})
+	objectStore := storage.NewFromConfig(cfg.Storage)
 
 	services := service.NewServices(service.Dependencies{
 		Config:      cfg,
 		Repos:       repos,
 		ProviderHub: providers,
 		Auth:        authManager,
+		Storage:     objectStore,
 	})
-	handlers := handler.NewHandlers(services, authManager)
+	handlers := handler.NewHandlers(services, authManager, objectStore)
 
 	engine := router.New(cfg, handlers)
 	return engine.Run(cfg.HTTP.Addr())

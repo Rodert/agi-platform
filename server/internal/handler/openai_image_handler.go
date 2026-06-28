@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	"agi-platform/server/internal/provider"
 	"agi-platform/server/internal/response"
 	"agi-platform/server/internal/service"
 
@@ -19,10 +20,12 @@ type openAIImageHandler struct {
 }
 
 type openAIImageRequest struct {
-	Model  string `json:"model" binding:"required"`
-	Prompt string `json:"prompt" binding:"required"`
-	Size   string `json:"size" binding:"required"`
-	N      int    `json:"n"`
+	Model           string                  `json:"model" binding:"required"`
+	Prompt          string                  `json:"prompt" binding:"required"`
+	Size            string                  `json:"size" binding:"required"`
+	N               int                     `json:"n"`
+	ReferenceImages []referenceImageRequest `json:"reference_images"`
+	Image           []string                `json:"image"`
 }
 
 type openAIImageResponse struct {
@@ -57,13 +60,15 @@ func (h *openAIImageHandler) Generate(c *gin.Context) {
 	}
 
 	result, err := h.service.Generate(c.Request.Context(), service.GenerateImageRequest{
-		UserID:   userID,
-		APIKeyID: currentAPIKeyID(c),
-		Source:   "api",
-		Model:    req.Model,
-		Prompt:   req.Prompt,
-		Size:     req.Size,
-		N:        req.N,
+		UserID:          userID,
+		APIKeyID:        currentAPIKeyID(c),
+		Source:          "api",
+		Model:           req.Model,
+		Prompt:          req.Prompt,
+		Size:            req.Size,
+		N:               req.N,
+		ReferenceImages: mergeReferenceImages(req.ReferenceImages, req.Image),
+		AppBaseURL:      requestBaseURL(c),
 	})
 	if err != nil {
 		writeServiceError(c, err)
@@ -83,4 +88,12 @@ func (h *openAIImageHandler) Generate(c *gin.Context) {
 		},
 		TaskID: result.Task.TaskNo,
 	})
+}
+
+func mergeReferenceImages(referenceImages []referenceImageRequest, imageURLs []string) []provider.ReferenceImage {
+	merged := toProviderReferenceImages(referenceImages)
+	for _, value := range imageURLs {
+		merged = append(merged, provider.ReferenceImage{URL: value})
+	}
+	return merged
 }

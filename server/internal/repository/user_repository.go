@@ -16,6 +16,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uint64) (*model.User, error)
 	FindByEmail(ctx context.Context, email string) (*model.User, error)
 	List(ctx context.Context, limit int, offset int) ([]model.User, error)
+	Update(ctx context.Context, tx Tx, user *model.User) error
 	DeductCredits(ctx context.Context, tx Tx, userID uint64, amount int64) (*model.User, error)
 	AddCredits(ctx context.Context, tx Tx, userID uint64, amount int64) (*model.User, error)
 }
@@ -62,6 +63,26 @@ func (r *GormUserRepository) List(ctx context.Context, limit int, offset int) ([
 		Offset(offset).
 		Find(&users).Error
 	return users, err
+}
+
+func (r *GormUserRepository) Update(ctx context.Context, tx Tx, user *model.User) error {
+	result := r.dbOrTx(tx).WithContext(ctx).Model(&model.User{}).
+		Where("id = ?", user.ID).
+		Updates(map[string]any{
+			"email":         user.Email,
+			"phone":         user.Phone,
+			"password_hash": user.PasswordHash,
+			"nickname":      user.Nickname,
+			"avatar_url":    user.AvatarURL,
+			"status":        user.Status,
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (r *GormUserRepository) DeductCredits(ctx context.Context, tx Tx, userID uint64, amount int64) (*model.User, error) {

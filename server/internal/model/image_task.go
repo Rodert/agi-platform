@@ -11,6 +11,7 @@ const (
 	ImageTaskStatusRunning   = "running"
 	ImageTaskStatusSucceeded = "succeeded"
 	ImageTaskStatusFailed    = "failed"
+	ImageTaskStatusTimeout   = "timeout"
 )
 
 type ImageTask struct {

@@ -15,6 +15,7 @@ type ProviderRepository interface {
 	FindByID(ctx context.Context, id uint64) (*model.Provider, error)
 	Create(ctx context.Context, provider *model.Provider) error
 	Update(ctx context.Context, id uint64, values map[string]interface{}) error
+	FindKeyByID(ctx context.Context, id uint64) (*model.ProviderKey, error)
 	PickActiveKey(ctx context.Context, providerID uint64) (*model.ProviderKey, error)
 	ListKeys(ctx context.Context, providerID uint64) ([]model.ProviderKey, error)
 	CreateKey(ctx context.Context, key *model.ProviderKey) error
@@ -75,6 +76,20 @@ func (r *GormProviderRepository) Update(ctx context.Context, id uint64, values m
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (r *GormProviderRepository) FindKeyByID(ctx context.Context, id uint64) (*model.ProviderKey, error) {
+	var key model.ProviderKey
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND status = ?", id, "active").
+		First(&key).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &key, nil
 }
 
 func (r *GormProviderRepository) PickActiveKey(ctx context.Context, providerID uint64) (*model.ProviderKey, error) {

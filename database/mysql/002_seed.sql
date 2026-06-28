@@ -34,7 +34,7 @@ VALUES (
   '通用高质量',
   '适合通用图片、商品图和海报封面',
   8,
-  JSON_ARRAY('1024x1024', '1024x1536', '1536x1024'),
+  JSON_ARRAY('1024x1024', '2048x2048', '1536x1024', '1024x1536', '3840x2160', '2160x3840'),
   1,
   4,
   1,
@@ -46,4 +46,12 @@ ON DUPLICATE KEY UPDATE `display_name` = VALUES(`display_name`);
 
 INSERT INTO `image_model_routes` (`id`, `model_id`, `provider_id`, `provider_model_name`, `enabled`, `priority`, `weight`)
 VALUES (1, 1, 1, 'mock-image', 1, 100, 100)
+ON DUPLICATE KEY UPDATE `provider_model_name` = VALUES(`provider_model_name`);
+
+INSERT INTO `video_models` (`id`, `code`, `display_name`, `description`, `price_credits`, `supported_aspect_ratios`, `supported_seconds`, `enabled`, `recommended`, `sort_order`)
+VALUES (1, 'video-ds-2.0-fast', 'AI 视频 Fast', '15 秒文生视频，支持参考图片、视频和音频', 80, JSON_ARRAY('9:16', '16:9', '1:1'), JSON_ARRAY(15), 1, 1, 20)
+ON DUPLICATE KEY UPDATE `display_name` = VALUES(`display_name`);
+
+INSERT INTO `video_model_routes` (`id`, `model_id`, `provider_id`, `provider_model_name`, `enabled`, `priority`, `weight`)
+VALUES (1, 1, 1, 'video-ds-2.0-fast', 1, 100, 100)
 ON DUPLICATE KEY UPDATE `provider_model_name` = VALUES(`provider_model_name`);

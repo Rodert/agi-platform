@@ -149,6 +149,7 @@ CREATE TABLE `image_model_routes` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `model_id` BIGINT UNSIGNED NOT NULL,
   `provider_id` BIGINT UNSIGNED NOT NULL,
+  `provider_key_id` BIGINT UNSIGNED NULL,
   `provider_model_name` VARCHAR(191) NOT NULL,
   `enabled` TINYINT(1) NOT NULL DEFAULT 1,
   `priority` INT NOT NULL DEFAULT 100,
@@ -159,9 +160,11 @@ CREATE TABLE `image_model_routes` (
   PRIMARY KEY (`id`),
   KEY `idx_image_model_routes_model_id` (`model_id`),
   KEY `idx_image_model_routes_provider_id` (`provider_id`),
+  KEY `idx_image_model_routes_provider_key_id` (`provider_key_id`),
   KEY `idx_image_model_routes_enabled_priority` (`enabled`, `priority`),
   CONSTRAINT `fk_image_model_routes_model_id` FOREIGN KEY (`model_id`) REFERENCES `image_models` (`id`),
-  CONSTRAINT `fk_image_model_routes_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`)
+  CONSTRAINT `fk_image_model_routes_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`),
+  CONSTRAINT `fk_image_model_routes_provider_key_id` FOREIGN KEY (`provider_key_id`) REFERENCES `provider_keys` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `image_tasks` (
@@ -234,6 +237,117 @@ CREATE TABLE `image_assets` (
   CONSTRAINT `fk_image_assets_task_id` FOREIGN KEY (`task_id`) REFERENCES `image_tasks` (`id`),
   CONSTRAINT `fk_image_assets_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
   CONSTRAINT `fk_image_assets_model_id` FOREIGN KEY (`model_id`) REFERENCES `image_models` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `video_models` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` VARCHAR(64) NOT NULL,
+  `display_name` VARCHAR(64) NOT NULL,
+  `description` VARCHAR(500) NOT NULL DEFAULT '',
+  `price_credits` BIGINT NOT NULL DEFAULT 0,
+  `supported_aspect_ratios` JSON NOT NULL,
+  `supported_seconds` JSON NOT NULL,
+  `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `recommended` TINYINT(1) NOT NULL DEFAULT 0,
+  `sort_order` INT NOT NULL DEFAULT 100,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_video_models_code` (`code`),
+  KEY `idx_video_models_enabled_sort` (`enabled`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `video_model_routes` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `model_id` BIGINT UNSIGNED NOT NULL,
+  `provider_id` BIGINT UNSIGNED NOT NULL,
+  `provider_key_id` BIGINT UNSIGNED NULL,
+  `provider_model_name` VARCHAR(191) NOT NULL,
+  `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `priority` INT NOT NULL DEFAULT 100,
+  `weight` INT NOT NULL DEFAULT 100,
+  `extra_config` JSON NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_video_model_routes_model_id` (`model_id`),
+  KEY `idx_video_model_routes_provider_id` (`provider_id`),
+  KEY `idx_video_model_routes_provider_key_id` (`provider_key_id`),
+  KEY `idx_video_model_routes_enabled_priority` (`enabled`, `priority`),
+  CONSTRAINT `fk_video_model_routes_model_id` FOREIGN KEY (`model_id`) REFERENCES `video_models` (`id`),
+  CONSTRAINT `fk_video_model_routes_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`),
+  CONSTRAINT `fk_video_model_routes_provider_key_id` FOREIGN KEY (`provider_key_id`) REFERENCES `provider_keys` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `video_tasks` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_no` VARCHAR(64) NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `api_key_id` BIGINT UNSIGNED NULL,
+  `model_id` BIGINT UNSIGNED NOT NULL,
+  `route_id` BIGINT UNSIGNED NULL,
+  `provider_id` BIGINT UNSIGNED NULL,
+  `provider_key_id` BIGINT UNSIGNED NULL,
+  `source` VARCHAR(32) NOT NULL DEFAULT 'web',
+  `prompt` TEXT NOT NULL,
+  `seconds` INT NOT NULL DEFAULT 15,
+  `aspect_ratio` VARCHAR(32) NOT NULL DEFAULT '9:16',
+  `images` JSON NULL,
+  `videos` JSON NULL,
+  `audios` JSON NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'pending',
+  `progress` INT NOT NULL DEFAULT 0,
+  `credits_used` BIGINT NOT NULL DEFAULT 0,
+  `refund_status` VARCHAR(32) NOT NULL DEFAULT 'none',
+  `provider_task_id` VARCHAR(191) NOT NULL DEFAULT '',
+  `provider_response` JSON NULL,
+  `error_message` VARCHAR(1000) NOT NULL DEFAULT '',
+  `started_at` DATETIME NULL,
+  `completed_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_video_tasks_task_no` (`task_no`),
+  KEY `idx_video_tasks_user_id` (`user_id`),
+  KEY `idx_video_tasks_status_created_at` (`status`, `created_at`),
+  KEY `idx_video_tasks_model_id` (`model_id`),
+  KEY `idx_video_tasks_provider_id` (`provider_id`),
+  CONSTRAINT `fk_video_tasks_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `fk_video_tasks_api_key_id` FOREIGN KEY (`api_key_id`) REFERENCES `api_keys` (`id`),
+  CONSTRAINT `fk_video_tasks_model_id` FOREIGN KEY (`model_id`) REFERENCES `video_models` (`id`),
+  CONSTRAINT `fk_video_tasks_route_id` FOREIGN KEY (`route_id`) REFERENCES `video_model_routes` (`id`),
+  CONSTRAINT `fk_video_tasks_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `providers` (`id`),
+  CONSTRAINT `fk_video_tasks_provider_key_id` FOREIGN KEY (`provider_key_id`) REFERENCES `provider_keys` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE `video_assets` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `task_id` BIGINT UNSIGNED NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `model_id` BIGINT UNSIGNED NOT NULL,
+  `url` VARCHAR(1000) NOT NULL,
+  `storage_provider` VARCHAR(64) NOT NULL DEFAULT '',
+  `storage_bucket` VARCHAR(191) NOT NULL DEFAULT '',
+  `storage_key` VARCHAR(500) NOT NULL DEFAULT '',
+  `mime_type` VARCHAR(64) NOT NULL DEFAULT 'video/mp4',
+  `size_bytes` BIGINT NULL,
+  `duration_seconds` INT NULL,
+  `prompt` TEXT NULL,
+  `status` VARCHAR(32) NOT NULL DEFAULT 'active',
+  `is_public` TINYINT(1) NOT NULL DEFAULT 0,
+  `download_count` BIGINT NOT NULL DEFAULT 0,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `deleted_at` DATETIME NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_video_assets_task_id` (`task_id`),
+  KEY `idx_video_assets_user_id_created_at` (`user_id`, `created_at`),
+  KEY `idx_video_assets_model_id` (`model_id`),
+  KEY `idx_video_assets_status` (`status`),
+  CONSTRAINT `fk_video_assets_task_id` FOREIGN KEY (`task_id`) REFERENCES `video_tasks` (`id`),
+  CONSTRAINT `fk_video_assets_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`),
+  CONSTRAINT `fk_video_assets_model_id` FOREIGN KEY (`model_id`) REFERENCES `video_models` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE `credit_packages` (
@@ -340,4 +454,3 @@ CREATE TABLE `admin_operation_logs` (
   KEY `idx_admin_operation_logs_created_at` (`created_at`),
   CONSTRAINT `fk_admin_operation_logs_admin_id` FOREIGN KEY (`admin_id`) REFERENCES `admin_users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
