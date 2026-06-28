@@ -34,7 +34,7 @@ AGI Platform 是一个面向 AI 图片和视频生成的 Web 平台，包含用�
 ├── config.yaml            # 本地配置示例
 ├── config.yaml.md         # 配置中文说明
 ├── compose.yaml           # 开发环境 compose
-├── compose.images.yaml    # 镜像部署 compose
+├── docker-compose-deploy.yaml # 服务器部署 compose
 └── .github/workflows      # Docker 镜像构建 CI
 ```
 
@@ -221,7 +221,8 @@ ALIYUN_REGISTRY_PASSWORD
 服务器部署文件：
 
 ```text
-compose.images.yaml
+docker-compose-deploy.yaml
+docker-compose-deploy.yaml.md
 deploy/backend.env.example
 deploy/nginx-api.conf.example
 ```
@@ -255,22 +256,24 @@ docker login crpi-4otucz63tm2q5dhq.cn-beijing.personal.cr.aliyuncs.com
 启动后端和 MySQL：
 
 ```bash
-docker compose --env-file deploy/backend.env -f compose.images.yaml up -d
+docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml up -d
 ```
 
 检查状态：
 
 ```bash
-docker compose --env-file deploy/backend.env -f compose.images.yaml ps
+docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml ps
 curl http://127.0.0.1:8080/health
 ```
 
 更新后端镜像：
 
 ```bash
-docker compose --env-file deploy/backend.env -f compose.images.yaml pull server
-docker compose --env-file deploy/backend.env -f compose.images.yaml up -d server
+docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml pull server
+docker compose --env-file deploy/backend.env -f docker-compose-deploy.yaml up -d server
 ```
+
+更多重启、更新、日志命令见 [docker-compose-deploy.yaml.md](docker-compose-deploy.yaml.md)。
 
 如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。`api.xxx.com` 可以用 nginx 或 Caddy 反向代理到 `http://127.0.0.1:8080`，nginx 示例见 `deploy/nginx-api.conf.example`。
 
