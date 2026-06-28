@@ -1,4 +1,4 @@
-name: Build and Push Docker Images
+name: Build and Push Server Docker Image
 
 on:
   push:
@@ -13,31 +13,8 @@ env:
 
 jobs:
   build-and-push:
-    name: Build and Push ${{ matrix.service.name }}
+    name: Build and Push server
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - name: server
-            context: .
-            dockerfile: server/Dockerfile
-            image: agi-platform-server
-            build_args: ""
-          - name: user-web
-            context: .
-            dockerfile: web/Dockerfile
-            image: agi-platform-user-web
-            build_args: |
-              APP_NAME=user
-              VITE_API_BASE_URL=${{ vars.USER_WEB_API_BASE_URL || vars.VITE_API_BASE_URL || 'http://127.0.0.1:8080' }}
-          - name: admin-web
-            context: .
-            dockerfile: web/Dockerfile
-            image: agi-platform-admin-web
-            build_args: |
-              APP_NAME=admin
-              VITE_API_BASE_URL=${{ vars.ADMIN_WEB_API_BASE_URL || vars.VITE_API_BASE_URL || 'http://127.0.0.1:8080' }}
 
     steps:
       - name: Checkout code
@@ -57,7 +34,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/${{ matrix.service.image }}
+          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_NAMESPACE }}/agi-platform-server
           tags: |
             type=sha,prefix=
             type=ref,event=branch
@@ -66,10 +43,9 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.service.context }}
-          file: ${{ matrix.service.dockerfile }}
+          context: .
+          file: server/Dockerfile
           push: true
           platforms: linux/amd64
-          build-args: ${{ matrix.service.build_args }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

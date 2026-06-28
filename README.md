@@ -11,7 +11,7 @@ AGI Platform 是一个面向 AI 图片和视频生成的 Web 平台，包含用�
 - 用户积分余额、加减积分、积分流水
 - 管理员任务列表、任务详情、请求参数查看与 JSON 复制
 - 管理员数据表浏览、字段中文说明、DDL 查看、记录详情弹窗
-- GitHub Actions 自动构建并推送 Docker 镜像
+- GitHub Actions 自动构建并推送后端 Docker 镜像
 
 ## 技术栈
 
@@ -207,11 +207,9 @@ GitHub Actions 文件：
 - push 到 `master`
 - 手动 `workflow_dispatch`
 
-会构建并推送三个镜像：
+会构建并推送后端镜像：
 
 - `agi-platform-server`
-- `agi-platform-user-web`
-- `agi-platform-admin-web`
 
 需要在 GitHub 仓库配置 Secrets：
 
@@ -220,19 +218,13 @@ ALIYUN_REGISTRY_USER
 ALIYUN_REGISTRY_PASSWORD
 ```
 
-可选配置 Variables：
-
-```text
-VITE_API_BASE_URL
-USER_WEB_API_BASE_URL
-ADMIN_WEB_API_BASE_URL
-```
-
 镜像部署可以使用：
 
 ```bash
 docker compose -f compose.images.yaml up -d
 ```
+
+如果用户端和管理员后台部署到 Cloudflare Pages，服务器侧只需要使用后端镜像和 MySQL；两个前端项目分别在 Cloudflare 中配置 `VITE_API_BASE_URL=https://api.xxx.com`。
 
 如果要指定镜像 tag：
 
