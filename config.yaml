@@ -24,6 +24,15 @@ auth:
   jwt_expire_seconds: 604800
   register_gift_credits: 100
 
+admin:
+  enabled: true
+  username: admin
+  password: admin123
+  reset_password_on_startup: false
+  nickname: Administrator
+  role: super_admin
+  status: active
+
 storage:
   provider: cos
   local_root: uploads

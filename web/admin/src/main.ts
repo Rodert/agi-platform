@@ -31,6 +31,8 @@ import {
   RefreshCw,
   Route,
   Server,
+  ShieldCheck,
+  UserCircle,
   Users
 } from "lucide-vue-next";
 import "./styles.css";
@@ -69,10 +71,11 @@ const state = reactive({
   walletPage: 1,
   walletPageSize: 20,
   walletHasNext: false,
+  profileMessage: "",
   upstreamModels: [] as UpstreamModel[],
   upstreamModelConfigs: [] as UpstreamModelConfig[],
   selectedProviderId: 1,
-  activeView: "users" as "users" | "credits" | "providers" | "tasks" | "database" | "taskDetail" | "videoDetail",
+  activeView: "users" as "users" | "credits" | "providers" | "tasks" | "database" | "taskDetail" | "videoDetail" | "profile",
   userModalOpen: false,
   userModalMode: "create" as "create" | "edit",
   selectedUser: null as User | null,
@@ -84,7 +87,7 @@ const state = reactive({
   error: ""
 });
 
-const menuViews = ["users", "credits", "providers", "tasks", "database"] as const;
+const menuViews = ["users", "credits", "providers", "tasks", "database", "profile"] as const;
 type MenuView = (typeof menuViews)[number];
 
 type UpstreamModel = {
@@ -109,7 +112,7 @@ type UpstreamModelConfig = {
   expanded: boolean;
 };
 
-const loginForm = reactive({ username: "admin", password: "admin123" });
+const loginForm = reactive({ username: "", password: "" });
 const showPassword = ref(false);
 const userForm = reactive({
   id: 0,
@@ -157,6 +160,11 @@ const providerForm = reactive({
   remark: ""
 });
 const providerKeyForm = reactive({ name: "default", api_key: "", status: "active", weight: 100 });
+const profileForm = reactive({
+  current_password: "",
+  new_password: "",
+  confirm_password: ""
+});
 const api = new ApiClient({
   getToken: () => state.token,
   onUnauthorized: () => logout()
@@ -356,6 +364,24 @@ async function changeWalletPage(delta: number) {
   if (nextPage < 1 || (delta > 0 && !state.walletHasNext)) return;
   state.walletPage = nextPage;
   await loadWalletLogs();
+}
+
+async function changePassword() {
+  await withLoading(async () => {
+    if (profileForm.new_password !== profileForm.confirm_password) {
+      throw new Error("两次输入的新密码不一致");
+    }
+    await api.post("/admin/me/password", {
+      current_password: profileForm.current_password,
+      new_password: profileForm.new_password
+    });
+    Object.assign(profileForm, {
+      current_password: "",
+      new_password: "",
+      confirm_password: ""
+    });
+    state.profileMessage = "密码已更新，下次登录请使用新密码";
+  });
 }
 
 async function loadDatabaseTables() {
@@ -1215,9 +1241,19 @@ function menuViewURL(view: MenuView) {
   return `${window.location.origin}${window.location.pathname}?view=${encodeURIComponent(view)}`;
 }
 
+function activeViewTitle() {
+  if (state.activeView === "users") return "用户管理";
+  if (state.activeView === "credits") return "积分管理";
+  if (state.activeView === "providers") return "上游 API 管理";
+  if (state.activeView === "database") return "数据表浏览";
+  if (state.activeView === "profile") return "个人中心";
+  return "生成任务";
+}
+
 async function withLoading(task: () => Promise<void>) {
   state.loading = true;
   state.error = "";
+  state.profileMessage = "";
   try {
     await task();
   } catch (error) {
@@ -1234,7 +1270,7 @@ function logout() {
 }
 
 const App = {
-  components: { Database, Eye, EyeOff, KeyRound, Loader2, LogOut, ReceiptText, RefreshCw, Route, Server, Users },
+  components: { Database, Eye, EyeOff, KeyRound, Loader2, LogOut, ReceiptText, RefreshCw, Route, Server, ShieldCheck, UserCircle, Users },
   setup() {
     bootstrap();
     return {
@@ -1243,6 +1279,7 @@ const App = {
       showPassword,
       userForm,
       creditForm,
+      profileForm,
       taskFilterForm,
       upstreamForm,
       providerForm,
@@ -1254,6 +1291,7 @@ const App = {
       taskRangeText,
       walletRangeText,
       databaseRangeText,
+      activeViewTitle,
       walletTypeText,
       signedCredits,
       formatDateTime,
@@ -1286,6 +1324,7 @@ const App = {
       loadWalletLogs,
       refreshWalletLogs,
       changeWalletPage,
+      changePassword,
       loadDatabaseTables,
       openDatabaseTable,
       loadDatabaseTable,
@@ -1329,6 +1368,7 @@ const App = {
         <button class="nav-item" :class="{ active: state.activeView === 'providers' }" @click="setActiveView('providers')"><Server :size="18" />上游 API</button>
         <button class="nav-item" :class="{ active: state.activeView === 'tasks' }" @click="setActiveView('tasks')"><Route :size="18" />任务</button>
         <button class="nav-item" :class="{ active: state.activeView === 'database' }" @click="setActiveView('database')"><Database :size="18" />数据表</button>
+        <button class="nav-item" :class="{ active: state.activeView === 'profile' }" @click="setActiveView('profile')"><UserCircle :size="18" />个人中心</button>
         <button v-if="state.admin" class="nav-item logout" @click="logout"><LogOut :size="18" />退出</button>
       </aside>
 
@@ -1359,7 +1399,7 @@ const App = {
         <template v-else>
           <header class="topbar">
             <div>
-              <h1>{{ state.activeView === 'users' ? '用户管理' : state.activeView === 'credits' ? '积分管理' : state.activeView === 'providers' ? '上游 API 管理' : state.activeView === 'database' ? '数据表浏览' : '生成任务' }}</h1>
+              <h1>{{ activeViewTitle() }}</h1>
               <p>{{ state.admin.username }} · {{ state.admin.role }}</p>
             </div>
             <button class="ghost-button" @click="loadAll"><RefreshCw :size="16" />刷新</button>
@@ -1480,6 +1520,49 @@ const App = {
                   <button class="ghost-button small-button" :disabled="!state.walletHasNext" @click="changeWalletPage(1)">下一页</button>
                 </div>
               </div>
+          </section>
+
+          <section v-if="state.activeView === 'profile'" class="panel">
+            <div class="panel-heading">
+              <div>
+                <h2>个人中心</h2>
+                <p>查看管理员账号信息并修改登录密码。</p>
+              </div>
+              <button class="ghost-button" @click="loadMe"><RefreshCw :size="16" />刷新</button>
+            </div>
+            <div class="profile-layout">
+              <div class="profile-card">
+                <UserCircle :size="38" />
+                <div>
+                  <strong>{{ state.admin.nickname || state.admin.username }}</strong>
+                  <span>{{ state.admin.username }}</span>
+                </div>
+                <div class="profile-meta">
+                  <span>角色</span>
+                  <strong>{{ state.admin.role }}</strong>
+                </div>
+                <div class="profile-meta">
+                  <span>状态</span>
+                  <strong>{{ state.admin.status }}</strong>
+                </div>
+              </div>
+
+              <div class="profile-form">
+                <div class="section-title">
+                  <ShieldCheck :size="18" />
+                  <h3>修改密码</h3>
+                </div>
+                <p v-if="state.profileMessage" class="secret-line">{{ state.profileMessage }}</p>
+                <div class="form-grid">
+                  <label>当前密码<input v-model="profileForm.current_password" type="password" autocomplete="current-password" /></label>
+                  <label>新密码<input v-model="profileForm.new_password" type="password" autocomplete="new-password" /></label>
+                  <label>确认新密码<input v-model="profileForm.confirm_password" type="password" autocomplete="new-password" /></label>
+                </div>
+                <button class="primary-button" @click="changePassword" :disabled="state.loading">
+                  <Loader2 v-if="state.loading" class="spin" :size="16" />保存新密码
+                </button>
+              </div>
+            </div>
           </section>
 
           <section v-if="state.activeView === 'providers'" class="upstream-page">

@@ -36,6 +36,7 @@ func New(cfg config.Config, handlers handler.Handlers) *gin.Engine {
 		userAPI.Use(middleware.UserAuth(handlers.AuthManager))
 		{
 			userAPI.GET("/me", handlers.Auth.Me)
+			userAPI.POST("/me/password", handlers.Auth.ChangePassword)
 			userAPI.GET("/api-keys", handlers.APIKey.List)
 			userAPI.POST("/api-keys", handlers.APIKey.Create)
 			userAPI.DELETE("/api-keys/:id", handlers.APIKey.Revoke)
@@ -64,6 +65,7 @@ func New(cfg config.Config, handlers handler.Handlers) *gin.Engine {
 		adminAPI.Use(middleware.AdminAuth(handlers.AuthManager))
 		{
 			adminAPI.GET("/me", handlers.Admin.Me)
+			adminAPI.POST("/me/password", handlers.Admin.ChangePassword)
 			adminAPI.GET("/users", handlers.Admin.ListUsers)
 			adminAPI.POST("/users", handlers.Admin.CreateUser)
 			adminAPI.PUT("/users/:id", handlers.Admin.UpdateUser)

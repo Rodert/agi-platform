@@ -33,6 +33,9 @@ vim deploy/backend.env
 ```text
 MYSQL_ROOT_PASSWORD=数据库 root 密码
 JWT_SECRET=很长的随机字符串
+ADMIN_USERNAME=管理员账号
+ADMIN_PASSWORD=管理员密码
+ADMIN_RESET_PASSWORD_ON_STARTUP=false
 COS_SECRET_ID=腾讯云 SecretId
 COS_SECRET_KEY=腾讯云 SecretKey
 COS_BUCKET=腾讯云 COS 桶名
@@ -168,13 +171,7 @@ MySQL 数据保存在 Docker volume：
 mysql-data
 ```
 
-后端本地兜底上传目录保存在：
-
-```text
-server-uploads
-```
-
-常规更新后端镜像不会影响数据库数据。
+常规更新后端镜像不会影响数据库数据。上传的参考文件和生成结果默认写入腾讯云 COS；COS 配置缺失或初始化失败时，后端会启动失败，不会自动写服务器本地磁盘。
 
 危险命令：
 

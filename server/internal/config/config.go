@@ -16,6 +16,7 @@ type Config struct {
 	HTTP     HTTPConfig
 	Database DatabaseConfig
 	Auth     AuthConfig
+	Admin    AdminConfig
 	Storage  StorageConfig
 }
 
@@ -51,6 +52,16 @@ type AuthConfig struct {
 	JWTSecret           string
 	TokenLifetime       time.Duration
 	RegisterGiftCredits int64
+}
+
+type AdminConfig struct {
+	Enabled                bool
+	Username               string
+	Password               string
+	ResetPasswordOnStartup bool
+	Nickname               string
+	Role                   string
+	Status                 string
 }
 
 type StorageConfig struct {
@@ -96,6 +107,15 @@ type rawConfig struct {
 		JWTExpireSeconds    int    `yaml:"jwt_expire_seconds"`
 		RegisterGiftCredits int64  `yaml:"register_gift_credits"`
 	} `yaml:"auth"`
+	Admin struct {
+		Enabled                *bool  `yaml:"enabled"`
+		Username               string `yaml:"username"`
+		Password               string `yaml:"password"`
+		ResetPasswordOnStartup *bool  `yaml:"reset_password_on_startup"`
+		Nickname               string `yaml:"nickname"`
+		Role                   string `yaml:"role"`
+		Status                 string `yaml:"status"`
+	} `yaml:"admin"`
 	Storage struct {
 		Provider      string `yaml:"provider"`
 		LocalRoot     string `yaml:"local_root"`
@@ -157,6 +177,15 @@ func Load() Config {
 			JWTSecret:           firstNonEmpty(raw.Auth.JWTSecret, "local-dev-secret-change-me"),
 			TokenLifetime:       time.Duration(firstNonZeroInt(raw.Auth.JWTExpireSeconds, 604800)) * time.Second,
 			RegisterGiftCredits: firstNonZeroInt64(raw.Auth.RegisterGiftCredits, 100),
+		},
+		Admin: AdminConfig{
+			Enabled:                firstBool(raw.Admin.Enabled, true),
+			Username:               firstNonEmpty(raw.Admin.Username, "admin"),
+			Password:               raw.Admin.Password,
+			ResetPasswordOnStartup: firstBool(raw.Admin.ResetPasswordOnStartup, false),
+			Nickname:               firstNonEmpty(raw.Admin.Nickname, "Administrator"),
+			Role:                   firstNonEmpty(raw.Admin.Role, "super_admin"),
+			Status:                 firstNonEmpty(raw.Admin.Status, "active"),
 		},
 		Storage: StorageConfig{
 			Provider:      firstNonEmpty(raw.Storage.Provider, "cos"),
@@ -221,6 +250,13 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.Auth.JWTSecret = getEnv("JWT_SECRET", cfg.Auth.JWTSecret)
 	cfg.Auth.TokenLifetime = time.Duration(getEnvInt("JWT_EXPIRE_SECONDS", int(cfg.Auth.TokenLifetime.Seconds()))) * time.Second
 	cfg.Auth.RegisterGiftCredits = int64(getEnvInt("REGISTER_GIFT_CREDITS", int(cfg.Auth.RegisterGiftCredits)))
+	cfg.Admin.Enabled = getEnvBool("ADMIN_BOOTSTRAP_ENABLED", cfg.Admin.Enabled)
+	cfg.Admin.Username = getEnv("ADMIN_USERNAME", cfg.Admin.Username)
+	cfg.Admin.Password = getEnv("ADMIN_PASSWORD", cfg.Admin.Password)
+	cfg.Admin.ResetPasswordOnStartup = getEnvBool("ADMIN_RESET_PASSWORD_ON_STARTUP", cfg.Admin.ResetPasswordOnStartup)
+	cfg.Admin.Nickname = getEnv("ADMIN_NICKNAME", cfg.Admin.Nickname)
+	cfg.Admin.Role = getEnv("ADMIN_ROLE", cfg.Admin.Role)
+	cfg.Admin.Status = getEnv("ADMIN_STATUS", cfg.Admin.Status)
 	cfg.Storage.Provider = getEnv("STORAGE_PROVIDER", cfg.Storage.Provider)
 	cfg.Storage.LocalRoot = getEnv("STORAGE_LOCAL_ROOT", cfg.Storage.LocalRoot)
 	cfg.Storage.SecretCSVPath = getEnv("COS_SECRET_CSV_PATH", cfg.Storage.SecretCSVPath)

@@ -19,6 +19,7 @@ type AuthService interface {
 	Register(ctx context.Context, req RegisterRequest) (*AuthResult, error)
 	Login(ctx context.Context, req LoginRequest) (*AuthResult, error)
 	Me(ctx context.Context, userID uint64) (*model.User, error)
+	ChangePassword(ctx context.Context, userID uint64, req ChangePasswordRequest) error
 }
 
 type RegisterRequest struct {
@@ -30,6 +31,11 @@ type RegisterRequest struct {
 type LoginRequest struct {
 	Email    string
 	Password string
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string
+	NewPassword     string
 }
 
 type AuthResult struct {
@@ -130,6 +136,25 @@ func (s *authService) Login(ctx context.Context, req LoginRequest) (*AuthResult,
 
 func (s *authService) Me(ctx context.Context, userID uint64) (*model.User, error) {
 	return s.repos.Users.FindByID(ctx, userID)
+}
+
+func (s *authService) ChangePassword(ctx context.Context, userID uint64, req ChangePasswordRequest) error {
+	if userID == 0 || len(req.NewPassword) < 6 || strings.TrimSpace(req.CurrentPassword) == "" {
+		return ErrInvalidRequest
+	}
+	user, err := s.repos.Users.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !s.auth.CheckPassword(user.PasswordHash, req.CurrentPassword) {
+		return ErrInvalidCredentials
+	}
+	passwordHash, err := s.auth.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+	user.PasswordHash = passwordHash
+	return s.repos.Users.Update(ctx, nil, user)
 }
 
 func defaultNickname(nickname string, email string) string {

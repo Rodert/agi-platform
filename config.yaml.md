@@ -104,6 +104,37 @@ auth:
 - `JWT_EXPIRE_SECONDS`
 - `REGISTER_GIFT_CREDITS`
 
+## admin
+
+```yaml
+admin:
+  enabled: true
+  username: admin
+  password: admin123
+  reset_password_on_startup: false
+  nickname: Administrator
+  role: super_admin
+  status: active
+```
+
+- `enabled`：是否在后端启动时自动确保默认管理员存在。
+- `username`：默认管理员账号。
+- `password`：默认管理员密码。首次创建管理员时必须至少 6 位。
+- `reset_password_on_startup`：是否在每次启动时把已有管理员密码重置为 `password`。默认 `false`，避免覆盖管理员在个人中心修改后的密码。
+- `nickname`：管理员昵称。
+- `role`：管理员角色，默认 `super_admin`。
+- `status`：管理员状态，默认 `active`。
+
+环境变量覆盖：
+
+- `ADMIN_BOOTSTRAP_ENABLED`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+- `ADMIN_RESET_PASSWORD_ON_STARTUP`
+- `ADMIN_NICKNAME`
+- `ADMIN_ROLE`
+- `ADMIN_STATUS`
+
 ## storage
 
 ```yaml
@@ -123,7 +154,7 @@ storage:
 - `provider`：存储类型。当前支持：
   - `cos`：腾讯云 COS
   - `local`：本地文件，主要用于开发兜底
-- `local_root`：本地存储目录，仅 `provider: local` 或 COS 初始化失败时使用。
+- `local_root`：本地存储目录，仅在显式设置 `provider: local` 时使用。
 - `secret_csv_path`：腾讯云密钥 CSV 路径。当前 Docker 挂载后是 `/app/SecretKey.csv`。
 - `cos.secret_id`：腾讯云 SecretId。建议不要写入仓库配置。
 - `cos.secret_key`：腾讯云 SecretKey。建议不要写入仓库配置。
@@ -154,6 +185,8 @@ storage:
 ## 部署提醒
 
 - 生产环境请修改 `auth.jwt_secret`。
+- 生产环境请修改 `admin.password`，更推荐用环境变量 `ADMIN_PASSWORD` 配置，不要把真实管理员密码提交到仓库。需要强制重置管理员密码时，再临时设置 `ADMIN_RESET_PASSWORD_ON_STARTUP=true`。
+- 生产环境建议保持 `storage.provider: cos`。COS 配置缺失或初始化失败时，服务会启动失败，不会自动退回写服务器本地磁盘。
 - 不建议把真实 `cos.secret_id`、`cos.secret_key` 写进 `config.yaml` 并提交。
 - 如果换 COS 桶，需要同步修改 `bucket`、`region`、`public_base_url`。
 - 如果服务部署到自己的域名下，前端和数据库中仍保存 `/api/assets/...`，后端会负责跳转到 COS。

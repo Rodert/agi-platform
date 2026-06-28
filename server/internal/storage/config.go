@@ -1,14 +1,22 @@
 package storage
 
 import (
+	"fmt"
 	"strings"
 
 	"agi-platform/server/internal/config"
 )
 
-func NewFromConfig(cfg config.StorageConfig) Store {
-	if strings.EqualFold(cfg.Provider, "local") {
-		return NewLocalStore(cfg.LocalRoot)
+func NewFromConfig(cfg config.StorageConfig) (Store, error) {
+	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	if provider == "" {
+		provider = "cos"
+	}
+	if provider == "local" {
+		return NewLocalStore(cfg.LocalRoot), nil
+	}
+	if provider != "cos" {
+		return nil, fmt.Errorf("unsupported storage provider: %s", cfg.Provider)
 	}
 
 	cosCfg := COSConfig{
@@ -19,10 +27,12 @@ func NewFromConfig(cfg config.StorageConfig) Store {
 		PublicBaseURL: cfg.COS.PublicBaseURL,
 		UploadPrefix:  cfg.COS.UploadPrefix,
 	}
-	if cosCfg.SecretID != "" && cosCfg.SecretKey != "" && cosCfg.Bucket != "" && cosCfg.Region != "" && cosCfg.PublicBaseURL != "" {
-		if store, err := NewCOSStore(cosCfg); err == nil {
-			return store
-		}
+	if cosCfg.SecretID == "" || cosCfg.SecretKey == "" || cosCfg.Bucket == "" || cosCfg.Region == "" || cosCfg.PublicBaseURL == "" {
+		return nil, fmt.Errorf("cos storage requires secret_id, secret_key, bucket, region and public_base_url")
 	}
-	return NewLocalStore(cfg.LocalRoot)
+	store, err := NewCOSStore(cosCfg)
+	if err != nil {
+		return nil, fmt.Errorf("init cos storage: %w", err)
+	}
+	return store, nil
 }

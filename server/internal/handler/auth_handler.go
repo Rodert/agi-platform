@@ -14,6 +14,7 @@ type AuthHandler interface {
 	Register(c *gin.Context)
 	Login(c *gin.Context)
 	Me(c *gin.Context)
+	ChangePassword(c *gin.Context)
 }
 
 type authHandler struct {
@@ -29,6 +30,11 @@ type registerRequest struct {
 type loginRequest struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required"`
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
 func NewAuthHandler(service service.AuthService) AuthHandler {
@@ -88,4 +94,28 @@ func (h *authHandler) Me(c *gin.Context) {
 		return
 	}
 	response.OK(c, user)
+}
+
+func (h *authHandler) ChangePassword(c *gin.Context) {
+	userID, ok := requireCurrentUserID(c)
+	if !ok {
+		return
+	}
+	var req changePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.service.ChangePassword(c.Request.Context(), userID, service.ChangePasswordRequest{
+		CurrentPassword: req.CurrentPassword,
+		NewPassword:     req.NewPassword,
+	}); err != nil {
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			response.Fail(c, http.StatusUnauthorized, "current password is incorrect")
+			return
+		}
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"changed": true})
 }

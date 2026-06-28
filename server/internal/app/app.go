@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"agi-platform/server/internal/auth"
@@ -31,7 +32,13 @@ func Run() error {
 		JWTSecret:     cfg.Auth.JWTSecret,
 		TokenLifetime: cfg.Auth.TokenLifetime,
 	})
-	objectStore := storage.NewFromConfig(cfg.Storage)
+	if err := service.EnsureBootstrapAdmin(context.Background(), repos, authManager, cfg.Admin); err != nil {
+		return fmt.Errorf("ensure bootstrap admin: %w", err)
+	}
+	objectStore, err := storage.NewFromConfig(cfg.Storage)
+	if err != nil {
+		return fmt.Errorf("init storage: %w", err)
+	}
 
 	services := service.NewServices(service.Dependencies{
 		Config:      cfg,

@@ -29,6 +29,7 @@ import {
   LogOut,
   ReceiptText,
   RefreshCw,
+  ShieldCheck,
   Sparkles,
   X,
   UserCircle
@@ -81,13 +82,14 @@ const state = reactive({
   selectedVideoTask: null as VideoTaskResult | null,
   previewAsset: null as { type: "image" | "video" | "audio"; url: string; title: string } | null,
   createdApiKey: "",
+  profileMessage: "",
   loading: false,
   error: "",
   authMode: "login" as "login" | "register",
-  activeView: "create" as "create" | "video" | "tasks" | "taskDetail" | "videoDetail" | "wallet" | "keys" | "docs"
+  activeView: "create" as "create" | "video" | "tasks" | "taskDetail" | "videoDetail" | "wallet" | "keys" | "docs" | "profile"
 });
 
-const menuViews = ["create", "video", "tasks", "wallet", "keys", "docs"] as const;
+const menuViews = ["create", "video", "tasks", "wallet", "keys", "docs", "profile"] as const;
 type MenuView = (typeof menuViews)[number];
 
 type UploadReferenceResult = {
@@ -105,9 +107,9 @@ const videoReferenceLimits = {
 const videoSecondOptions = [5, 10, 15];
 
 const authForm = reactive({
-  email: "user@example.com",
-  password: "secret123",
-  nickname: "User"
+  email: "",
+  password: "",
+  nickname: ""
 });
 
 const generateForm = reactive({
@@ -131,6 +133,12 @@ const videoForm = reactive({
 
 const keyForm = reactive({
   name: "default"
+});
+
+const profileForm = reactive({
+  current_password: "",
+  new_password: "",
+  confirm_password: ""
 });
 
 const showPassword = ref(false);
@@ -227,6 +235,10 @@ async function loadWalletLogs() {
 }
 
 async function refreshCurrentView() {
+  if (state.activeView === "profile") {
+    await loadMe();
+    return;
+  }
   if (state.activeView === "tasks") {
     await Promise.all([loadTasks(), loadVideoTasks()]);
     return;
@@ -306,9 +318,28 @@ async function revokeApiKey(id: number) {
   });
 }
 
+async function changePassword() {
+  await withLoading(async () => {
+    if (profileForm.new_password !== profileForm.confirm_password) {
+      throw new Error("两次输入的新密码不一致");
+    }
+    await api.post("/api/me/password", {
+      current_password: profileForm.current_password,
+      new_password: profileForm.new_password
+    });
+    Object.assign(profileForm, {
+      current_password: "",
+      new_password: "",
+      confirm_password: ""
+    });
+    state.profileMessage = "密码已更新，下次登录请使用新密码";
+  });
+}
+
 async function withLoading(task: () => Promise<void>) {
   state.loading = true;
   state.error = "";
+  state.profileMessage = "";
   try {
     await task();
   } catch (error) {
@@ -518,6 +549,7 @@ function activeViewTitle() {
   if (state.activeView === "videoDetail") return "视频详情";
   if (state.activeView === "wallet") return "积分流水";
   if (state.activeView === "keys") return "API Key";
+  if (state.activeView === "profile") return "个人中心";
   return "API 接入";
 }
 
@@ -644,6 +676,7 @@ const App = {
     LogOut,
     ReceiptText,
     RefreshCw,
+    ShieldCheck,
     Sparkles,
     X,
     UserCircle
@@ -656,6 +689,7 @@ const App = {
       generateForm,
       videoForm,
       keyForm,
+      profileForm,
       showPassword,
       selectedModel,
       selectedVideoModel,
@@ -700,6 +734,7 @@ const App = {
       generateVideo,
       createApiKey,
       revokeApiKey,
+      changePassword,
       uploadImageReferenceFile,
       uploadVideoReferenceFile,
       removeImageReference,
@@ -738,6 +773,9 @@ const App = {
         </button>
         <button class="nav-item" :class="{ active: state.activeView === 'docs' }" @click="setActiveView('docs')">
           <Code2 :size="18" /> API 接入
+        </button>
+        <button class="nav-item" :class="{ active: state.activeView === 'profile' }" @click="setActiveView('profile')">
+          <UserCircle :size="18" /> 个人中心
         </button>
 
         <div class="account" v-if="state.user">
@@ -1181,6 +1219,49 @@ Authorization: Bearer agi_xxx
   "n": 1,
   "reference_images": [{"url": "https://example.com/reference.png"}]
 }</pre>
+          </section>
+
+          <section v-if="state.activeView === 'profile'" class="panel list-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>个人中心</h2>
+                <p>查看账号信息并修改登录密码。</p>
+              </div>
+              <button class="ghost-button" @click="loadMe"><RefreshCw :size="16" />刷新</button>
+            </div>
+            <div class="profile-layout">
+              <div class="profile-card">
+                <UserCircle :size="38" />
+                <div>
+                  <strong>{{ state.user.nickname }}</strong>
+                  <span>{{ state.user.email || '-' }}</span>
+                </div>
+                <div class="profile-meta">
+                  <span>积分余额</span>
+                  <strong>{{ formatCredits(state.user.credits) }}</strong>
+                </div>
+                <div class="profile-meta">
+                  <span>账号状态</span>
+                  <strong>{{ state.user.status }}</strong>
+                </div>
+              </div>
+
+              <div class="profile-form">
+                <div class="section-title">
+                  <ShieldCheck :size="18" />
+                  <h3>修改密码</h3>
+                </div>
+                <p v-if="state.profileMessage" class="secret-line">{{ state.profileMessage }}</p>
+                <div class="form-grid">
+                  <label>当前密码<input v-model="profileForm.current_password" type="password" autocomplete="current-password" /></label>
+                  <label>新密码<input v-model="profileForm.new_password" type="password" autocomplete="new-password" /></label>
+                  <label>确认新密码<input v-model="profileForm.confirm_password" type="password" autocomplete="new-password" /></label>
+                </div>
+                <button class="primary-button" @click="changePassword" :disabled="state.loading">
+                  <Loader2 v-if="state.loading" class="spin" :size="16" />保存新密码
+                </button>
+              </div>
+            </div>
           </section>
         </template>
       </section>

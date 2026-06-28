@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"agi-platform/server/internal/response"
@@ -12,6 +13,7 @@ import (
 type AdminAuthHandler interface {
 	Login(c *gin.Context)
 	Me(c *gin.Context)
+	ChangePassword(c *gin.Context)
 	ListUsers(c *gin.Context)
 	CreateUser(c *gin.Context)
 	UpdateUser(c *gin.Context)
@@ -30,6 +32,11 @@ type adminLoginRequest struct {
 type adjustUserCreditsRequest struct {
 	Amount int64  `json:"amount" binding:"required"`
 	Remark string `json:"remark"`
+}
+
+type adminChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=6"`
 }
 
 type adminSaveUserRequest struct {
@@ -75,6 +82,30 @@ func (h *adminAuthHandler) Me(c *gin.Context) {
 		return
 	}
 	response.OK(c, admin)
+}
+
+func (h *adminAuthHandler) ChangePassword(c *gin.Context) {
+	adminID, ok := requireCurrentAdminID(c)
+	if !ok {
+		return
+	}
+	var req adminChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := h.service.ChangePassword(c.Request.Context(), adminID, service.ChangePasswordRequest{
+		CurrentPassword: req.CurrentPassword,
+		NewPassword:     req.NewPassword,
+	}); err != nil {
+		if errors.Is(err, service.ErrInvalidCredentials) {
+			response.Fail(c, http.StatusUnauthorized, "current password is incorrect")
+			return
+		}
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, gin.H{"changed": true})
 }
 
 func (h *adminAuthHandler) ListUsers(c *gin.Context) {

@@ -14,7 +14,6 @@ RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
 COPY --from=builder /out/agi-server /usr/local/bin/agi-server
-RUN mkdir -p /app/uploads && chown -R app:app /app
 
 ENV HTTP_HOST=0.0.0.0 \
     HTTP_PORT=18082

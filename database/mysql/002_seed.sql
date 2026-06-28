@@ -2,10 +2,6 @@ USE `agi_platform`;
 
 SET NAMES utf8mb4;
 
-INSERT INTO `admin_users` (`id`, `username`, `password_hash`, `nickname`, `role`, `status`)
-VALUES (1, 'admin', '$2a$10$No72On/WKoV/8ZRXpFRM5uzIRP5YoXe544GX79XE3bWTFOmglEPRu', 'Administrator', 'super_admin', 'active')
-ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`), `role` = VALUES(`role`);
-
 INSERT INTO `users` (`id`, `email`, `password_hash`, `nickname`, `credits`, `status`)
 VALUES (1, 'user@example.com', '$2a$10$eQFCGz6k9lCk6egZH9vmi.clHXrljQRf1lavxGgjuJu.J1ohQPhie', 'User', 1000, 'active')
 ON DUPLICATE KEY UPDATE `nickname` = VALUES(`nickname`);

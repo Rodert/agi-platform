@@ -62,12 +62,11 @@ database/mysql/002_seed.sql
 
 The seed data creates:
 
-- Admin user: `admin / admin123`
 - Demo user: `id = 1`
 - Mock provider
 - One enabled image model: `general-high-quality`
 
-The default admin account is for local development only.
+The default admin account is created from `config.yaml` or `ADMIN_*` environment variables on service startup. Existing admin passwords are not reset on every restart unless `ADMIN_RESET_PASSWORD_ON_STARTUP=true`.
 
 ## Run
 

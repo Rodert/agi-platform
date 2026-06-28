@@ -13,6 +13,7 @@ import (
 type AdminService interface {
 	Login(ctx context.Context, req AdminLoginRequest) (*AdminAuthResult, error)
 	Me(ctx context.Context, adminID uint64) (*model.AdminUser, error)
+	ChangePassword(ctx context.Context, adminID uint64, req ChangePasswordRequest) error
 	ListUsers(ctx context.Context, limit int, offset int) ([]model.User, error)
 	CreateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error)
 	UpdateUser(ctx context.Context, req AdminSaveUserRequest) (*model.User, error)
@@ -86,6 +87,24 @@ func (s *adminService) Login(ctx context.Context, req AdminLoginRequest) (*Admin
 
 func (s *adminService) Me(ctx context.Context, adminID uint64) (*model.AdminUser, error) {
 	return s.repos.Admins.FindByID(ctx, adminID)
+}
+
+func (s *adminService) ChangePassword(ctx context.Context, adminID uint64, req ChangePasswordRequest) error {
+	if adminID == 0 || len(req.NewPassword) < 6 || strings.TrimSpace(req.CurrentPassword) == "" {
+		return ErrInvalidRequest
+	}
+	admin, err := s.repos.Admins.FindByID(ctx, adminID)
+	if err != nil {
+		return err
+	}
+	if !s.auth.CheckPassword(admin.PasswordHash, req.CurrentPassword) {
+		return ErrInvalidCredentials
+	}
+	passwordHash, err := s.auth.HashPassword(req.NewPassword)
+	if err != nil {
+		return err
+	}
+	return s.repos.Admins.UpdatePassword(ctx, adminID, passwordHash)
 }
 
 func (s *adminService) ListUsers(ctx context.Context, limit int, offset int) ([]model.User, error) {

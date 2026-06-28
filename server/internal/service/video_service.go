@@ -3,13 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"mime"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -370,23 +366,10 @@ func (s *videoService) normalizeImageReference(value string, appBaseURL string) 
 	} else if normalized != trimmed {
 		return normalized, nil
 	}
-	if !strings.HasPrefix(trimmed, "/uploads/") {
-		return trimmed, nil
+	if strings.HasPrefix(trimmed, "/uploads/") {
+		return "", fmt.Errorf("%w: 参考图片需要公网可访问 URL，当前本地上传路径不能被上游访问", ErrInvalidRequest)
 	}
-	clean := filepath.Clean(strings.TrimPrefix(trimmed, "/uploads/"))
-	if clean == "." || strings.HasPrefix(clean, "..") || filepath.IsAbs(clean) {
-		return "", fmt.Errorf("%w: invalid reference image path", ErrInvalidRequest)
-	}
-	path := filepath.Join("uploads", clean)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	mimeType := mime.TypeByExtension(filepath.Ext(path))
-	if mimeType == "" {
-		mimeType = "image/png"
-	}
-	return "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data), nil
+	return trimmed, nil
 }
 
 func rejectLocalMediaReferences(label string, values []string) error {

@@ -17,7 +17,7 @@ AGI Platform 是一个面向 AI 图片和视频生成的 Web 平台，包含用�
 
 - 后端：Go、Gin、GORM、MySQL
 - 前端：Vue 3、Vite、TypeScript
-- 存储：腾讯云 COS，可退回本地存储
+- 存储：腾讯云 COS
 - 部署：Docker Compose、GitHub Actions、阿里云 ACR
 
 ## 目录结构
@@ -75,19 +75,13 @@ docker compose down -v
 
 ## 默认账号
 
-管理员后台：
+| 入口 | 地址 | 账号 | 密码 | 来源 |
+| --- | --- | --- | --- | --- |
+| 管理员后台 | `http://localhost:5174` | `admin` | `admin123` | `config.yaml` 的 `admin` 配置 |
+| 用户端 | `http://localhost:5173` | `user@example.com` | `secret123` | `database/mysql/002_seed.sql` 种子数据 |
 
-```text
-账号：admin
-密码：admin123
-```
-
-用户端种子账号：
-
-```text
-邮箱：user@example.com
-密码：secret123
-```
+管理员账号由 `config.yaml` 的 `admin` 配置生成；生产环境请在 `deploy/backend.env` 中修改 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD`，不要沿用默认密码。
+已有管理员不会在每次启动时自动重置密码；如需强制重置，临时设置 `ADMIN_RESET_PASSWORD_ON_STARTUP=true`。
 
 也可以在用户端直接注册新账号。注册赠送积分由 `config.yaml` 的 `auth.register_gift_credits` 控制。
 
@@ -110,6 +104,7 @@ CONFIG_PATH=/app/config.yaml
 生产环境重点修改：
 
 - `auth.jwt_secret`：必须换成高强度随机字符串
+- `admin.*`：默认管理员账号、密码、角色和状态
 - `database.*`：数据库连接信息
 - `storage.cos.*`：腾讯云 COS 存储桶、地域、公网域名
 - `COS_SECRET_ID` / `COS_SECRET_KEY` 或 `SecretKey.csv`：腾讯云访问密钥
@@ -240,6 +235,9 @@ cp deploy/backend.env.example deploy/backend.env
 ```text
 MYSQL_ROOT_PASSWORD
 JWT_SECRET
+ADMIN_USERNAME
+ADMIN_PASSWORD
+ADMIN_RESET_PASSWORD_ON_STARTUP
 COS_SECRET_ID
 COS_SECRET_KEY
 COS_BUCKET
