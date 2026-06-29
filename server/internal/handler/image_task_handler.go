@@ -144,13 +144,13 @@ func writeServiceError(c *gin.Context, err error) {
 	case errors.Is(err, service.ErrInvalidRequest):
 		response.Fail(c, http.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrEmailAlreadyExists):
-		response.Fail(c, http.StatusConflict, "email already exists")
+		response.Fail(c, http.StatusConflict, "该邮箱已注册")
 	case errors.Is(err, service.ErrInvalidCredentials):
-		response.Fail(c, http.StatusUnauthorized, "invalid credentials")
+		response.Fail(c, http.StatusUnauthorized, "账号或密码错误")
 	case errors.Is(err, service.ErrInsufficientCredits):
-		response.Fail(c, http.StatusPaymentRequired, "insufficient credits")
+		response.Fail(c, http.StatusPaymentRequired, "积分不足")
 	case errors.Is(err, repository.ErrNotFound):
-		response.Fail(c, http.StatusNotFound, "record not found")
+		response.Fail(c, http.StatusNotFound, "记录不存在")
 	default:
 		response.Fail(c, http.StatusInternalServerError, err.Error())
 	}

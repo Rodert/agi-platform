@@ -73,7 +73,7 @@ func (h *authHandler) Login(c *gin.Context) {
 	})
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			response.Fail(c, http.StatusUnauthorized, "invalid credentials")
+			response.Fail(c, http.StatusUnauthorized, "账号或密码错误")
 			return
 		}
 		writeServiceError(c, err)
@@ -111,7 +111,7 @@ func (h *authHandler) ChangePassword(c *gin.Context) {
 		NewPassword:     req.NewPassword,
 	}); err != nil {
 		if errors.Is(err, service.ErrInvalidCredentials) {
-			response.Fail(c, http.StatusUnauthorized, "current password is incorrect")
+			response.Fail(c, http.StatusUnauthorized, "当前密码不正确")
 			return
 		}
 		writeServiceError(c, err)

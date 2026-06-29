@@ -818,6 +818,7 @@ const App = {
             <button class="primary-button" @click="submitAuth" :disabled="state.loading">
               <Loader2 v-if="state.loading" class="spin" :size="17" /> {{ state.authMode === 'login' ? '登录' : '创建账号' }}
             </button>
+            <p v-if="state.error" class="error">{{ state.error }}</p>
           </div>
         </div>
 
