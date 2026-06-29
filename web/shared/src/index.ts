@@ -258,7 +258,7 @@ export class ApiClient {
   private onUnauthorized?: () => void;
 
   constructor(options: ApiClientOptions = {}) {
-    this.baseURL = options.baseURL ?? viteEnv("VITE_API_BASE_URL") ?? "http://127.0.0.1:8080";
+    this.baseURL = resolveApiBaseURL(options.baseURL);
     this.getToken = options.getToken;
     this.onUnauthorized = options.onUnauthorized;
   }
@@ -308,6 +308,29 @@ export class ApiClient {
 function viteEnv(key: string): string | undefined {
   const meta = import.meta as ImportMeta & { env?: Record<string, string | undefined> };
   return meta.env?.[key];
+}
+
+export function resolveApiBaseURL(explicitBaseURL?: string): string {
+  const configured = explicitBaseURL ?? viteEnv("VITE_API_BASE_URL");
+  if (configured && configured.trim() !== "") {
+    return trimTrailingSlash(configured.trim());
+  }
+
+  if (isLocalBrowserHost()) {
+    return "http://127.0.0.1:8080";
+  }
+  return "https://api.newmovieai.com";
+}
+
+function isLocalBrowserHost(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
 }
 
 export function formatCredits(value: number | undefined): string {

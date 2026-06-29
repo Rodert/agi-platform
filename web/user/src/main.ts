@@ -13,7 +13,8 @@ import {
   type VideoTaskResult,
   type WalletLog,
   formatCredits,
-  parseJSONList
+  parseJSONList,
+  resolveApiBaseURL
 } from "@agi-platform/shared";
 import {
   ArrowDownToLine,
@@ -38,9 +39,7 @@ import "./styles.css";
 
 const tokenKey = "agi_user_token";
 const storedToken = localStorage.getItem(tokenKey);
-const apiBaseURL =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
-    "http://127.0.0.1:8080");
+const apiBaseURL = resolveApiBaseURL();
 const commonSizes = ["1K", "2K", "4K"];
 const openAIRatiosBySize: Record<string, string[]> = {
   "1K": ["1:1"],

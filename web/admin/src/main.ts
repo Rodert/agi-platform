@@ -18,7 +18,8 @@ import {
   type VideoTaskResult,
   type WalletLog,
   formatCredits,
-  parseJSONList
+  parseJSONList,
+  resolveApiBaseURL
 } from "@agi-platform/shared";
 import {
   Database,
@@ -38,9 +39,7 @@ import {
 import "./styles.css";
 
 const tokenKey = "agi_admin_token";
-const apiBaseURL =
-  ((import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.VITE_API_BASE_URL ??
-    "http://127.0.0.1:8080");
+const apiBaseURL = resolveApiBaseURL();
 const defaultImageSupportedSizes = "1024x1024,2048x2048,1536x1024,1024x1536,3840x2160,2160x3840";
 const defaultVideoAspectRatios = "9:16,16:9,1:1";
 const defaultVideoSeconds = "5,10,15";
