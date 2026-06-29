@@ -1032,6 +1032,7 @@ const App = {
               </div>
               <button class="ghost-button" @click="refreshCurrentView"><RefreshCw :size="16" />刷新</button>
             </div>
+            <p class="retention-warning">视频和图片资源只保留 3 天，请提前下载到本地存储。</p>
             <div v-if="!combinedTasks.length" class="empty-state">
               <ListChecks :size="36" />
               <span>还没有任务记录</span>
