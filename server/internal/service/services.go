@@ -31,7 +31,7 @@ type Services struct {
 
 func NewServices(deps Dependencies) Services {
 	return Services{
-		Auth:         NewAuthService(deps.Repos, deps.Auth, deps.Config.Auth.RegisterGiftCredits),
+		Auth:         NewAuthService(deps.Repos, deps.Auth),
 		Admin:        NewAdminService(deps.Repos, deps.Auth),
 		AdminCatalog: NewAdminCatalogService(deps.Repos),
 		APIKey:       NewAPIKeyService(deps.Repos, deps.Auth),

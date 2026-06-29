@@ -22,7 +22,6 @@ database:
 auth:
   jwt_secret: local-dev-secret-change-me
   jwt_expire_seconds: 604800
-  register_gift_credits: 0
 
 admin:
   enabled: true

@@ -49,9 +49,8 @@ type DatabaseConfig struct {
 }
 
 type AuthConfig struct {
-	JWTSecret           string
-	TokenLifetime       time.Duration
-	RegisterGiftCredits int64
+	JWTSecret     string
+	TokenLifetime time.Duration
 }
 
 type AdminConfig struct {
@@ -103,9 +102,8 @@ type rawConfig struct {
 		ConnMaxLifetimeSeconds int    `yaml:"conn_max_lifetime_seconds"`
 	} `yaml:"database"`
 	Auth struct {
-		JWTSecret           string `yaml:"jwt_secret"`
-		JWTExpireSeconds    int    `yaml:"jwt_expire_seconds"`
-		RegisterGiftCredits *int64 `yaml:"register_gift_credits"`
+		JWTSecret        string `yaml:"jwt_secret"`
+		JWTExpireSeconds int    `yaml:"jwt_expire_seconds"`
 	} `yaml:"auth"`
 	Admin struct {
 		Enabled                *bool  `yaml:"enabled"`
@@ -174,9 +172,8 @@ func Load() Config {
 			MaxLifetime:  time.Duration(firstNonZeroInt(raw.Database.ConnMaxLifetimeSeconds, 3600)) * time.Second,
 		},
 		Auth: AuthConfig{
-			JWTSecret:           firstNonEmpty(raw.Auth.JWTSecret, "local-dev-secret-change-me"),
-			TokenLifetime:       time.Duration(firstNonZeroInt(raw.Auth.JWTExpireSeconds, 604800)) * time.Second,
-			RegisterGiftCredits: firstInt64Ptr(raw.Auth.RegisterGiftCredits, 0),
+			JWTSecret:     firstNonEmpty(raw.Auth.JWTSecret, "local-dev-secret-change-me"),
+			TokenLifetime: time.Duration(firstNonZeroInt(raw.Auth.JWTExpireSeconds, 604800)) * time.Second,
 		},
 		Admin: AdminConfig{
 			Enabled:                firstBool(raw.Admin.Enabled, true),
@@ -249,7 +246,6 @@ func applyEnvOverrides(cfg *Config) {
 	cfg.Database.MaxLifetime = time.Duration(getEnvInt("MYSQL_CONN_MAX_LIFETIME_SECONDS", int(cfg.Database.MaxLifetime.Seconds()))) * time.Second
 	cfg.Auth.JWTSecret = getEnv("JWT_SECRET", cfg.Auth.JWTSecret)
 	cfg.Auth.TokenLifetime = time.Duration(getEnvInt("JWT_EXPIRE_SECONDS", int(cfg.Auth.TokenLifetime.Seconds()))) * time.Second
-	cfg.Auth.RegisterGiftCredits = int64(getEnvInt("REGISTER_GIFT_CREDITS", int(cfg.Auth.RegisterGiftCredits)))
 	cfg.Admin.Enabled = getEnvBool("ADMIN_BOOTSTRAP_ENABLED", cfg.Admin.Enabled)
 	cfg.Admin.Username = getEnv("ADMIN_USERNAME", cfg.Admin.Username)
 	cfg.Admin.Password = getEnv("ADMIN_PASSWORD", cfg.Admin.Password)
@@ -316,13 +312,6 @@ func firstNonZeroInt(value int, fallback int) int {
 }
 
 func firstBool(value *bool, fallback bool) bool {
-	if value == nil {
-		return fallback
-	}
-	return *value
-}
-
-func firstInt64Ptr(value *int64, fallback int64) int64 {
 	if value == nil {
 		return fallback
 	}

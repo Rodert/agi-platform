@@ -15,6 +15,8 @@ var (
 	ErrEmailAlreadyExists = errors.New("email already exists")
 )
 
+const defaultRegisterCredits int64 = 0
+
 type AuthService interface {
 	Register(ctx context.Context, req RegisterRequest) (*AuthResult, error)
 	Login(ctx context.Context, req LoginRequest) (*AuthResult, error)
@@ -44,16 +46,14 @@ type AuthResult struct {
 }
 
 type authService struct {
-	repos               repository.Repositories
-	auth                auth.Manager
-	registerGiftCredits int64
+	repos repository.Repositories
+	auth  auth.Manager
 }
 
-func NewAuthService(repos repository.Repositories, authManager auth.Manager, registerGiftCredits int64) AuthService {
+func NewAuthService(repos repository.Repositories, authManager auth.Manager) AuthService {
 	return &authService{
-		repos:               repos,
-		auth:                authManager,
-		registerGiftCredits: registerGiftCredits,
+		repos: repos,
+		auth:  authManager,
 	}
 }
 
@@ -78,7 +78,7 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 		Email:        &email,
 		PasswordHash: passwordHash,
 		Nickname:     defaultNickname(req.Nickname, email),
-		Credits:      s.registerGiftCredits,
+		Credits:      defaultRegisterCredits,
 		Status:       "active",
 	}
 
@@ -86,16 +86,16 @@ func (s *authService) Register(ctx context.Context, req RegisterRequest) (*AuthR
 		if err := s.repos.Users.Create(ctx, tx, user); err != nil {
 			return err
 		}
-		if s.registerGiftCredits <= 0 {
+		if defaultRegisterCredits <= 0 {
 			return nil
 		}
 		relatedID := user.ID
 		return s.repos.Wallets.CreateLog(ctx, tx, &model.WalletLog{
 			UserID:        user.ID,
 			Type:          "register_gift",
-			Amount:        s.registerGiftCredits,
+			Amount:        defaultRegisterCredits,
 			BalanceBefore: 0,
-			BalanceAfter:  s.registerGiftCredits,
+			BalanceAfter:  defaultRegisterCredits,
 			RelatedType:   "user",
 			RelatedID:     &relatedID,
 			Remark:        "register gift credits",
