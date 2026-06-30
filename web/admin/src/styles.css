@@ -580,6 +580,17 @@ button:disabled,
   opacity: 0.52;
 }
 
+.credit-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.credit-edit input {
+  width: 86px;
+  min-height: 34px;
+}
+
 .pagination-bar {
   display: flex;
   justify-content: space-between;

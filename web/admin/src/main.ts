@@ -1084,12 +1084,59 @@ async function deleteImageModel(model: ImageModel) {
   });
 }
 
+async function saveImageModelCredits(model: ImageModel) {
+  const priceCredits = Number(model.price_credits);
+  if (!Number.isFinite(priceCredits) || priceCredits < 0) {
+    throw new Error("图片模型积分不能小于 0");
+  }
+  await withLoading(async () => {
+    await api.put(`/admin/image-models/${model.id}`, {
+      code: model.code,
+      display_name: model.display_name,
+      description: model.description || "",
+      cover_url: model.cover_url || "",
+      price_credits: priceCredits,
+      supported_sizes: Array.isArray(model.supported_sizes) ? model.supported_sizes.map(String) : [],
+      support_text_to_image: model.support_text_to_image,
+      support_image_to_image: model.support_image_to_image,
+      support_edit: model.support_edit,
+      max_images_per_request: model.max_images_per_request,
+      auto_refund_on_failure: model.auto_refund_on_failure,
+      enabled: model.enabled,
+      recommended: model.recommended,
+      sort_order: model.sort_order
+    });
+    await loadModels();
+  });
+}
+
 async function deleteVideoModel(model: VideoModel) {
   if (!window.confirm(`确认删除视频模型「${model.display_name || model.code}」？已有任务引用的模型不能删除，可以改为停用。`)) {
     return;
   }
   await withLoading(async () => {
     await api.delete(`/admin/video-models/${model.id}`);
+    await loadVideoModels();
+  });
+}
+
+async function saveVideoModelCredits(model: VideoModel) {
+  const priceCredits = Number(model.price_credits);
+  if (!Number.isFinite(priceCredits) || priceCredits < 0) {
+    throw new Error("视频模型积分不能小于 0");
+  }
+  await withLoading(async () => {
+    await api.put(`/admin/video-models/${model.id}`, {
+      code: model.code,
+      display_name: model.display_name,
+      description: model.description || "",
+      price_credits: priceCredits,
+      supported_aspect_ratios: Array.isArray(model.supported_aspect_ratios) ? model.supported_aspect_ratios.map(String) : [],
+      supported_seconds: Array.isArray(model.supported_seconds) ? model.supported_seconds.map(Number).filter(Number.isFinite) : [],
+      enabled: model.enabled,
+      recommended: model.recommended,
+      sort_order: model.sort_order
+    });
     await loadVideoModels();
   });
 }
@@ -1465,7 +1512,9 @@ const App = {
       applyUpstreamModel,
       toggleModelConfig,
       deleteImageModel,
+      saveImageModelCredits,
       deleteVideoModel,
+      saveVideoModelCredits,
       createProviderKey,
       deleteProviderKey,
       editProvider,
@@ -1719,13 +1768,18 @@ const App = {
             <div class="panel full">
               <h2>图片模型概览</h2>
               <table>
-                <thead><tr><th>模型 ID</th><th>模型 Code</th><th>显示名称</th><th>价格</th><th>启用</th><th></th></tr></thead>
+                <thead><tr><th>模型 ID</th><th>模型 Code</th><th>显示名称</th><th>每张积分</th><th>启用</th><th></th></tr></thead>
                 <tbody>
                   <tr v-for="item in state.imageModels" :key="item.id">
                     <td>{{ item.id }}</td>
                     <td>{{ item.code }}</td>
                     <td>{{ item.display_name }}</td>
-                    <td>{{ item.price_credits }}</td>
+                    <td>
+                      <div class="credit-edit">
+                        <input v-model.number="item.price_credits" type="number" min="0" />
+                        <button class="small-button" type="button" @click="saveImageModelCredits(item)" :disabled="state.loading">保存积分</button>
+                      </div>
+                    </td>
                     <td>{{ item.enabled ? '是' : '否' }}</td>
                     <td><button class="danger-button" type="button" @click="deleteImageModel(item)">删除</button></td>
                   </tr>
@@ -1742,7 +1796,12 @@ const App = {
                     <td>{{ item.id }}</td>
                     <td>{{ item.code }}</td>
                     <td>{{ item.display_name }}</td>
-                    <td>{{ item.price_credits }}</td>
+                    <td>
+                      <div class="credit-edit">
+                        <input v-model.number="item.price_credits" type="number" min="0" />
+                        <button class="small-button" type="button" @click="saveVideoModelCredits(item)" :disabled="state.loading">保存积分</button>
+                      </div>
+                    </td>
                     <td>{{ formatList(item.supported_aspect_ratios, '-') }}</td>
                     <td>{{ formatList(item.supported_seconds, '-') }}</td>
                     <td>{{ item.enabled ? '是' : '否' }}</td>
