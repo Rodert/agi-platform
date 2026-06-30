@@ -148,3 +148,38 @@ func TestGrokVideoProviderParsesCompletedURLVariants(t *testing.T) {
 		t.Fatalf("unexpected status %+v", status)
 	}
 }
+
+func TestGrokVideoProviderParsesQueuedProgress(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"task_6Xb1ToZvHkfTsuBOknVQ3fKjyYG0JQsG",
+			"code":"success",
+			"data":{
+				"data":{"status":"pending","progress":94},
+				"status":"QUEUED",
+				"task_id":"task_6Xb1ToZvHkfTsuBOknVQ3fKjyYG0JQsG",
+				"progress":"94%",
+				"fail_reason":""
+			},
+			"object":"video",
+			"status":"queued",
+			"task_id":"task_6Xb1ToZvHkfTsuBOknVQ3fKjyYG0JQsG",
+			"progress":94
+		}`))
+	}))
+	defer server.Close()
+
+	provider := NewGrokVideoProvider()
+	status, err := provider.GetVideo(context.Background(), VideoStatusRequest{
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		TaskID:  "task_6Xb1ToZvHkfTsuBOknVQ3fKjyYG0JQsG",
+	})
+	if err != nil {
+		t.Fatalf("get video: %v", err)
+	}
+	if status.Status != "pending" || status.Progress != 94 || status.URL != "" {
+		t.Fatalf("unexpected queued status %+v", status)
+	}
+}

@@ -95,11 +95,10 @@ func (p *GrokVideoProvider) GetVideo(ctx context.Context, req VideoStatusRequest
 	if parsed.Code != "" && !strings.EqualFold(parsed.Code, "success") {
 		return nil, NewResponseError(fmt.Sprintf("provider request failed: code=%s message=%s", parsed.Code, parsed.Message), compactRawResponse(raw))
 	}
-	progress := parseProgressPercent(parsed.Data.Progress)
 	result := &VideoStatusResult{
 		TaskID:       firstNonEmpty(parsed.Data.TaskID, parsed.TaskID, parsed.ID, req.TaskID),
-		Status:       normalizeGrokVideoStatus(firstNonEmpty(parsed.Data.Status, parsed.Status)),
-		Progress:     progress,
+		Status:       normalizeGrokVideoStatus(firstNonEmpty(parsed.Data.Status, parsed.Data.Data.Status, parsed.Status)),
+		Progress:     grokVideoProgress(parsed),
 		URL:          grokVideoResponseURL(parsed),
 		ErrorMessage: parsed.Data.FailReason,
 		RawResponse:  compactRawResponse(raw),
@@ -152,6 +151,10 @@ type grokVideoStatusEnvelope struct {
 			URL string `json:"url"`
 		} `json:"video"`
 		Output []string `json:"output"`
+		Data   struct {
+			Status   string `json:"status"`
+			Progress int    `json:"progress"`
+		} `json:"data"`
 	} `json:"data"`
 }
 
@@ -209,6 +212,25 @@ func grokVideoResponseURL(parsed grokVideoStatusEnvelope) string {
 		firstString(parsed.Output),
 		firstString(parsed.Data.Output),
 	)
+}
+
+func grokVideoProgress(parsed grokVideoStatusEnvelope) int {
+	if parsed.Data.Progress != "" {
+		return parseProgressPercent(parsed.Data.Progress)
+	}
+	if parsed.Progress > 0 {
+		if parsed.Progress > 100 {
+			return 100
+		}
+		return parsed.Progress
+	}
+	if parsed.Data.Data.Progress > 0 {
+		if parsed.Data.Data.Progress > 100 {
+			return 100
+		}
+		return parsed.Data.Data.Progress
+	}
+	return 0
 }
 
 func firstString(values []string) string {
