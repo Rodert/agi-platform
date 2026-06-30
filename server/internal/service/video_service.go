@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"time"
 
@@ -18,7 +20,7 @@ import (
 )
 
 type VideoService interface {
-	ListModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error)
+	ListModels(ctx context.Context, limit int, offset int) ([]VideoModelItem, error)
 	Submit(ctx context.Context, req SubmitVideoRequest) (*VideoTaskDetail, error)
 	Get(ctx context.Context, taskNo string) (*VideoTaskDetail, error)
 	GetForUser(ctx context.Context, userID uint64, taskNo string) (*VideoTaskDetail, error)
@@ -46,6 +48,18 @@ type VideoTaskDetail struct {
 	Videos []model.VideoAsset `json:"videos"`
 }
 
+type VideoModelItem struct {
+	model.VideoModel
+	ReferencePolicy VideoReferencePolicy `json:"reference_policy"`
+}
+
+type VideoReferencePolicy struct {
+	RequireExactlyOneImage bool `json:"require_exactly_one_image"`
+	MaxReferenceImages     int  `json:"max_reference_images"`
+	MaxReferenceVideos     int  `json:"max_reference_videos"`
+	MaxReferenceAudios     int  `json:"max_reference_audios"`
+}
+
 type videoService struct {
 	repos       repository.Repositories
 	providerHub *provider.Registry
@@ -56,9 +70,20 @@ func NewVideoService(repos repository.Repositories, providerHub *provider.Regist
 	return &videoService{repos: repos, providerHub: providerHub, store: store}
 }
 
-func (s *videoService) ListModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error) {
+func (s *videoService) ListModels(ctx context.Context, limit int, offset int) ([]VideoModelItem, error) {
 	limit, offset = normalizePage(limit, offset)
-	return s.repos.Videos.ListModels(ctx, limit, offset)
+	models, err := s.repos.Videos.ListModels(ctx, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]VideoModelItem, 0, len(models))
+	for _, item := range models {
+		items = append(items, VideoModelItem{
+			VideoModel:      item,
+			ReferencePolicy: s.videoReferencePolicy(ctx, item.ID),
+		})
+	}
+	return items, nil
 }
 
 func (s *videoService) Submit(ctx context.Context, req SubmitVideoRequest) (*VideoTaskDetail, error) {
@@ -137,6 +162,9 @@ func (s *videoService) prepareAndCreateVideoTask(ctx context.Context, req Submit
 			return nil, fmt.Errorf("%w: invalid route extra_config", ErrInvalidRequest)
 		}
 	}
+	if requireExactlyOneImage(extraConfig) && len(req.Images) != 1 {
+		return nil, fmt.Errorf("%w: current video model requires exactly one reference image", ErrInvalidRequest)
+	}
 	imagesJSON, _ := json.Marshal(nonNilStringSlice(req.Images))
 	videosJSON, _ := json.Marshal(nonNilStringSlice(req.Videos))
 	audiosJSON, _ := json.Marshal(nonNilStringSlice(req.Audios))
@@ -168,6 +196,30 @@ func (s *videoService) prepareAndCreateVideoTask(ctx context.Context, req Submit
 		return nil, err
 	}
 	return &preparedVideoTask{task: task, videoModel: videoModel, route: route, upstream: upstream, upstreamKey: upstreamKey, extraConfig: extraConfig, req: req}, nil
+}
+
+func (s *videoService) videoReferencePolicy(ctx context.Context, modelID uint64) VideoReferencePolicy {
+	policy := VideoReferencePolicy{
+		MaxReferenceImages: 4,
+		MaxReferenceVideos: 3,
+		MaxReferenceAudios: 1,
+	}
+	route, err := s.repos.Videos.PickRoute(ctx, modelID)
+	if err != nil || len(route.ExtraConfig) == 0 {
+		return policy
+	}
+	extraConfig := map[string]interface{}{}
+	if err := json.Unmarshal(route.ExtraConfig, &extraConfig); err != nil {
+		return policy
+	}
+	policy.RequireExactlyOneImage = requireExactlyOneImage(extraConfig)
+	policy.MaxReferenceImages = intConfig(extraConfig, "max_reference_images", policy.MaxReferenceImages)
+	policy.MaxReferenceVideos = intConfig(extraConfig, "max_reference_videos", policy.MaxReferenceVideos)
+	policy.MaxReferenceAudios = intConfig(extraConfig, "max_reference_audios", policy.MaxReferenceAudios)
+	if policy.RequireExactlyOneImage {
+		policy.MaxReferenceImages = 1
+	}
+	return policy
 }
 
 func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideoTask) {
@@ -207,14 +259,20 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 		return
 	}
 	task.ProviderTaskID = created.TaskID
+	statusResult := &provider.VideoStatusResult{
+		TaskID:      created.TaskID,
+		Status:      normalizeVideoTaskStatus(created.Status),
+		Progress:    10,
+		URL:         created.URL,
+		RawResponse: created.RawResponse,
+	}
 	_ = s.repos.Videos.UpdateTaskStatus(ctx, nil, task.ID, model.VideoTaskStatusRunning, 10, map[string]interface{}{
 		"provider_task_id": created.TaskID,
 		"provider_response": datatypes.JSON(
 			[]byte(safeJSON(created.RawResponse)),
 		),
 	})
-	status := created.Status
-	var statusResult *provider.VideoStatusResult
+	status := statusResult.Status
 	for i := 0; i < 90; i++ {
 		if status == "succeeded" || status == "failed" {
 			break
@@ -243,12 +301,7 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 		_ = s.markVideoFailedAndRefund(ctx, task, videoFailureError(status, statusResult))
 		return
 	}
-	content, mimeType, err := adapter.DownloadVideo(ctx, provider.VideoContentRequest{
-		TaskID:         created.TaskID,
-		BaseURL:        prepared.upstream.BaseURL,
-		APIKey:         providerAPIKey(prepared.upstreamKey),
-		TimeoutSeconds: prepared.upstream.TimeoutSeconds,
-	})
+	content, mimeType, err := s.downloadVideoResult(ctx, adapter, prepared, created.TaskID, statusResult)
 	if err != nil {
 		_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 		return
@@ -258,6 +311,18 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 			_ = s.markVideoFailedAndRefund(ctx, task, err)
 		}
 	}
+}
+
+func (s *videoService) downloadVideoResult(ctx context.Context, adapter provider.VideoProvider, prepared *preparedVideoTask, taskID string, result *provider.VideoStatusResult) ([]byte, string, error) {
+	if result != nil && strings.TrimSpace(result.URL) != "" {
+		return downloadExternalVideo(ctx, result.URL, prepared.upstream.TimeoutSeconds)
+	}
+	return adapter.DownloadVideo(ctx, provider.VideoContentRequest{
+		TaskID:         taskID,
+		BaseURL:        prepared.upstream.BaseURL,
+		APIKey:         providerAPIKey(prepared.upstreamKey),
+		TimeoutSeconds: prepared.upstream.TimeoutSeconds,
+	})
 }
 
 func (s *videoService) createVideoTaskAndDeductCredits(ctx context.Context, task *model.VideoTask, credits int64) error {
@@ -531,6 +596,76 @@ func nonNilStringSlice(values []string) []string {
 		return []string{}
 	}
 	return values
+}
+
+func normalizeVideoTaskStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "success", "succeeded", "completed", "complete", "done":
+		return model.VideoTaskStatusSucceeded
+	case "failure", "failed", "fail", "error", "cancelled", "canceled":
+		return model.VideoTaskStatusFailed
+	case "running", "processing", "in_progress":
+		return model.VideoTaskStatusRunning
+	case "":
+		return model.VideoTaskStatusPending
+	default:
+		return status
+	}
+}
+
+func downloadExternalVideo(ctx context.Context, endpoint string, timeoutSeconds int) ([]byte, string, error) {
+	timeout := time.Duration(defaultInt(timeoutSeconds, 60)) * time.Second
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	resp, err := (&http.Client{Timeout: timeout}).Do(httpReq)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	content, err := io.ReadAll(io.LimitReader(resp.Body, 512<<20))
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", provider.NewHTTPResponseError("provider video content failed", resp.StatusCode, string(content))
+	}
+	mimeType := resp.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = "video/mp4"
+	}
+	return content, mimeType, nil
+}
+
+func requireExactlyOneImage(config map[string]interface{}) bool {
+	value, ok := config["require_exactly_one_image"]
+	if !ok {
+		return false
+	}
+	parsed, ok := value.(bool)
+	return ok && parsed
+}
+
+func intConfig(config map[string]interface{}, key string, fallback int) int {
+	value, ok := config[key]
+	if !ok {
+		return fallback
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case string:
+		var parsed int
+		if _, err := fmt.Sscanf(strings.TrimSpace(typed), "%d", &parsed); err == nil {
+			return parsed
+		}
+	}
+	return fallback
 }
 
 func videoFailureError(status string, result *provider.VideoStatusResult) error {

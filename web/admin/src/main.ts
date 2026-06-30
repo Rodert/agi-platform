@@ -585,36 +585,32 @@ async function saveUpstreamIntegration() {
       priority: Number(upstreamForm.priority) || 100,
       remark: ""
     };
-    const existingProvider = state.providers.find((item) => item.code === providerPayload.code);
-    const provider = existingProvider
-      ? await updateAndReturnProvider(existingProvider, providerPayload)
-      : await api.post<Provider>("/admin/providers", providerPayload);
-
-    if (upstreamForm.api_key.trim()) {
-      await api.post(`/admin/providers/${provider.id}/keys`, {
-        name: upstreamForm.api_key_name || "default",
-        api_key: upstreamForm.api_key.trim(),
-        status: "active",
-        weight: 100
-      });
-      upstreamForm.api_key = "";
-    }
-
-    state.selectedProviderId = provider.id;
-    await loadProviderKeys();
-
     for (const config of configs) {
       if (!config.model_code.trim() || !config.display_name.trim() || !config.provider_model_name.trim()) {
         throw new Error("请检查模型名称、显示名称和上游模型名");
       }
-      if (config.model_type === "video") {
-        await saveVideoModelConfig(provider.id, config);
-      } else {
-        await saveImageModelConfig(provider.id, config);
-      }
     }
 
+    const result = await api.post<{ provider: Provider }>("/admin/upstream/integration", {
+      provider: providerPayload,
+      api_key: upstreamForm.api_key.trim()
+        ? {
+        name: upstreamForm.api_key_name || "default",
+        api_key: upstreamForm.api_key.trim(),
+        status: "active",
+        weight: 100
+          }
+        : undefined,
+      models: configs.map(upstreamIntegrationModelPayload)
+    });
+
+    if (upstreamForm.api_key.trim()) {
+      upstreamForm.api_key = "";
+    }
+
+    state.selectedProviderId = result.provider.id;
     await Promise.all([loadProviders(), loadModels(), loadVideoModels()]);
+    await loadProviderKeys();
     closeUpstreamModal();
   });
 }
@@ -814,6 +810,62 @@ function modelConfigFromName(model: string, expanded = false): UpstreamModelConf
     priority: Number(upstreamForm.priority) || 100,
     enabled: true,
     expanded
+  };
+}
+
+function upstreamIntegrationModelPayload(config: UpstreamModelConfig) {
+  const basePayload = {
+    model_type: config.model_type,
+    provider_key_id: config.provider_key_id,
+    provider_model_name: config.provider_model_name.trim(),
+    enabled: upstreamForm.enabled && config.enabled,
+    priority: Number(config.priority) || Number(upstreamForm.priority) || 100,
+    weight: 100,
+    extra_config: parseExtraConfig(config.extra_config)
+  };
+  if (config.model_type === "video") {
+    const ratios = splitCSV(config.supported_aspect_ratios);
+    const seconds = splitNumberCSV(config.supported_seconds);
+    if (!ratios.length || !seconds.length) {
+      throw new Error("请填写视频模型支持比例和时长");
+    }
+    return {
+      ...basePayload,
+      video_model: {
+        code: config.model_code.trim(),
+        display_name: config.display_name.trim(),
+        description: config.description.trim(),
+        price_credits: Number(config.price_credits) || 0,
+        supported_aspect_ratios: ratios,
+        supported_seconds: seconds,
+        enabled: upstreamForm.enabled && config.enabled,
+        recommended: true,
+        sort_order: 20
+      }
+    };
+  }
+  const sizes = splitCSV(config.supported_sizes);
+  if (!sizes.length) {
+    throw new Error("请填写图片模型支持尺寸");
+  }
+  return {
+    ...basePayload,
+    image_model: {
+      code: config.model_code.trim(),
+      display_name: config.display_name.trim(),
+      description: config.description.trim(),
+      cover_url: "",
+      price_credits: Number(config.price_credits) || 0,
+      supported_sizes: sizes,
+      support_text_to_image: true,
+      support_image_to_image: true,
+      support_edit: true,
+      max_images_per_request: Number(config.max_images_per_request) || 1,
+      auto_refund_on_failure: true,
+      enabled: upstreamForm.enabled && config.enabled,
+      recommended: true,
+      sort_order: 10
+    }
   };
 }
 

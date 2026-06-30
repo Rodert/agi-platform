@@ -14,6 +14,7 @@ type ImageModelRepository interface {
 	ListEnabled(ctx context.Context) ([]model.ImageModel, error)
 	FindByID(ctx context.Context, id uint64) (*model.ImageModel, error)
 	FindByCode(ctx context.Context, code string) (*model.ImageModel, error)
+	FindAnyByCode(ctx context.Context, code string) (*model.ImageModel, error)
 	Create(ctx context.Context, imageModel *model.ImageModel) error
 	Update(ctx context.Context, id uint64, values map[string]interface{}) error
 	Delete(ctx context.Context, tx Tx, id uint64) error
@@ -66,6 +67,20 @@ func (r *GormImageModelRepository) FindByCode(ctx context.Context, code string) 
 	var imageModel model.ImageModel
 	err := r.db.WithContext(ctx).
 		Where("code = ? AND enabled = ?", code, true).
+		First(&imageModel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &imageModel, nil
+}
+
+func (r *GormImageModelRepository) FindAnyByCode(ctx context.Context, code string) (*model.ImageModel, error) {
+	var imageModel model.ImageModel
+	err := r.db.WithContext(ctx).
+		Where("code = ?", code).
 		First(&imageModel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

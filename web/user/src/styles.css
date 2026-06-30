@@ -419,6 +419,30 @@ button:disabled,
   font-size: 13px;
 }
 
+.model-hint strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.required-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff1f1;
+  color: #c72222 !important;
+  border: 1px solid #ffd1d1;
+  font-size: 12px !important;
+  font-weight: 700;
+}
+
+.model-hint .danger-hint {
+  color: #c72222;
+}
+
 .result-panel {
   min-height: calc(100vh - 154px);
 }

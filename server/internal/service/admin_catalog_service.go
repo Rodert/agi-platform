@@ -37,6 +37,7 @@ type AdminCatalogService interface {
 	ListVideoModelRoutes(ctx context.Context, modelID uint64) ([]model.VideoModelRoute, error)
 	CreateVideoModelRoute(ctx context.Context, modelID uint64, req VideoModelRouteRequest) (*model.VideoModelRoute, error)
 	UpdateVideoModelRoute(ctx context.Context, id uint64, req VideoModelRouteRequest) error
+	SaveUpstreamIntegration(ctx context.Context, req UpstreamIntegrationRequest) (*UpstreamIntegrationResult, error)
 	QueryUpstreamModels(ctx context.Context, req QueryUpstreamModelsRequest) ([]UpstreamModel, error)
 }
 
@@ -113,6 +114,31 @@ type VideoModelRouteRequest struct {
 type QueryUpstreamModelsRequest struct {
 	BaseURL string
 	APIKey  string
+}
+
+type UpstreamIntegrationRequest struct {
+	Provider ProviderRequest
+	APIKey   *ProviderKeyRequest
+	Models   []UpstreamIntegrationModelRequest
+}
+
+type UpstreamIntegrationModelRequest struct {
+	ModelType         string
+	ProviderKeyID     *uint64
+	ProviderModelName string
+	Enabled           bool
+	Priority          int
+	Weight            int
+	ExtraConfig       map[string]interface{}
+	ImageModel        ImageModelRequest
+	VideoModel        VideoModelRequest
+}
+
+type UpstreamIntegrationResult struct {
+	Provider    *model.Provider `json:"provider"`
+	KeyCreated  bool            `json:"key_created"`
+	ImageModels int             `json:"image_models"`
+	VideoModels int             `json:"video_models"`
 }
 
 type UpstreamModel struct {
@@ -456,6 +482,207 @@ func (s *adminCatalogService) UpdateVideoModelRoute(ctx context.Context, id uint
 		"weight":              defaultInt(req.Weight, 100),
 		"extra_config":        datatypes.JSON(extra),
 	})
+}
+
+func (s *adminCatalogService) SaveUpstreamIntegration(ctx context.Context, req UpstreamIntegrationRequest) (*UpstreamIntegrationResult, error) {
+	providerReq := req.Provider
+	providerReq.Code = strings.TrimSpace(providerReq.Code)
+	providerReq.Name = strings.TrimSpace(providerReq.Name)
+	providerReq.Type = strings.TrimSpace(providerReq.Type)
+	providerReq.BaseURL = strings.TrimSpace(providerReq.BaseURL)
+	if providerReq.Code == "" || providerReq.Name == "" || providerReq.Type == "" || providerReq.BaseURL == "" || len(req.Models) == 0 {
+		return nil, ErrInvalidRequest
+	}
+
+	provider, err := s.upsertProvider(ctx, providerReq)
+	if err != nil {
+		return nil, err
+	}
+
+	var keyID *uint64
+	keyCreated := false
+	if req.APIKey != nil && strings.TrimSpace(req.APIKey.APIKey) != "" {
+		keyReq := *req.APIKey
+		keyReq.Name = strings.TrimSpace(keyReq.Name)
+		keyReq.APIKey = strings.TrimSpace(keyReq.APIKey)
+		key, err := s.CreateProviderKey(ctx, provider.ID, keyReq)
+		if err != nil {
+			return nil, err
+		}
+		keyID = &key.ID
+		keyCreated = true
+	} else if key, err := s.repos.Providers.PickActiveKey(ctx, provider.ID); err == nil {
+		keyID = &key.ID
+	} else if !errors.Is(err, repository.ErrNotFound) {
+		return nil, err
+	}
+
+	result := &UpstreamIntegrationResult{Provider: provider, KeyCreated: keyCreated}
+	for _, item := range req.Models {
+		item.ProviderModelName = strings.TrimSpace(item.ProviderModelName)
+		item.ModelType = strings.TrimSpace(item.ModelType)
+		if item.ProviderKeyID == nil {
+			item.ProviderKeyID = keyID
+		}
+		if item.Weight == 0 {
+			item.Weight = 100
+		}
+		if item.ModelType == "video" {
+			if err := s.saveVideoIntegrationModel(ctx, provider.ID, item); err != nil {
+				return nil, err
+			}
+			result.VideoModels++
+			continue
+		}
+		if item.ModelType != "" && item.ModelType != "image" {
+			return nil, ErrInvalidRequest
+		}
+		if err := s.saveImageIntegrationModel(ctx, provider.ID, item); err != nil {
+			return nil, err
+		}
+		result.ImageModels++
+	}
+	return result, nil
+}
+
+func (s *adminCatalogService) upsertProvider(ctx context.Context, req ProviderRequest) (*model.Provider, error) {
+	provider, err := s.repos.Providers.FindByCode(ctx, req.Code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return s.CreateProvider(ctx, req)
+		}
+		return nil, err
+	}
+	if provider != nil {
+		if err := s.UpdateProvider(ctx, provider.ID, req); err != nil {
+			return nil, err
+		}
+		updated := *provider
+		updated.Code = req.Code
+		updated.Name = req.Name
+		updated.Type = req.Type
+		updated.BaseURL = req.BaseURL
+		updated.Enabled = req.Enabled
+		updated.TimeoutSeconds = defaultInt(req.TimeoutSeconds, 60)
+		updated.RetryCount = req.RetryCount
+		updated.Priority = defaultInt(req.Priority, 100)
+		updated.DailyLimit = req.DailyLimit
+		updated.Remark = req.Remark
+		return &updated, nil
+	}
+	return s.CreateProvider(ctx, req)
+}
+
+func (s *adminCatalogService) saveImageIntegrationModel(ctx context.Context, providerID uint64, item UpstreamIntegrationModelRequest) error {
+	req := item.ImageModel
+	req.Code = strings.TrimSpace(req.Code)
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	req.Description = strings.TrimSpace(req.Description)
+	if req.Code == "" || req.DisplayName == "" || item.ProviderModelName == "" {
+		return ErrInvalidRequest
+	}
+	imageModel, err := s.findImageModelByCode(ctx, req.Code)
+	if err != nil {
+		return err
+	}
+	if imageModel == nil {
+		imageModel, err = s.CreateImageModel(ctx, req)
+		if err != nil {
+			return err
+		}
+	} else if err := s.UpdateImageModel(ctx, imageModel.ID, req); err != nil {
+		return err
+	}
+	return s.upsertImageModelRoute(ctx, imageModel.ID, providerID, ImageModelRouteRequest{
+		ProviderID:        providerID,
+		ProviderKeyID:     item.ProviderKeyID,
+		ProviderModelName: item.ProviderModelName,
+		Enabled:           item.Enabled,
+		Priority:          item.Priority,
+		Weight:            item.Weight,
+		ExtraConfig:       item.ExtraConfig,
+	})
+}
+
+func (s *adminCatalogService) saveVideoIntegrationModel(ctx context.Context, providerID uint64, item UpstreamIntegrationModelRequest) error {
+	req := item.VideoModel
+	req.Code = strings.TrimSpace(req.Code)
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	req.Description = strings.TrimSpace(req.Description)
+	if req.Code == "" || req.DisplayName == "" || item.ProviderModelName == "" {
+		return ErrInvalidRequest
+	}
+	videoModel, err := s.findVideoModelByCode(ctx, req.Code)
+	if err != nil {
+		return err
+	}
+	if videoModel == nil {
+		videoModel, err = s.CreateVideoModel(ctx, req)
+		if err != nil {
+			return err
+		}
+	} else if err := s.UpdateVideoModel(ctx, videoModel.ID, req); err != nil {
+		return err
+	}
+	return s.upsertVideoModelRoute(ctx, videoModel.ID, providerID, VideoModelRouteRequest{
+		ProviderID:        providerID,
+		ProviderKeyID:     item.ProviderKeyID,
+		ProviderModelName: item.ProviderModelName,
+		Enabled:           item.Enabled,
+		Priority:          item.Priority,
+		Weight:            item.Weight,
+		ExtraConfig:       item.ExtraConfig,
+	})
+}
+
+func (s *adminCatalogService) findImageModelByCode(ctx context.Context, code string) (*model.ImageModel, error) {
+	imageModel, err := s.repos.ImageModels.FindAnyByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return imageModel, nil
+}
+
+func (s *adminCatalogService) findVideoModelByCode(ctx context.Context, code string) (*model.VideoModel, error) {
+	videoModel, err := s.repos.Videos.FindAnyModelByCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return videoModel, nil
+}
+
+func (s *adminCatalogService) upsertImageModelRoute(ctx context.Context, modelID uint64, providerID uint64, req ImageModelRouteRequest) error {
+	routes, err := s.repos.ImageModels.ListRoutes(ctx, modelID)
+	if err != nil {
+		return err
+	}
+	for _, route := range routes {
+		if route.ProviderID == providerID {
+			return s.UpdateImageModelRoute(ctx, route.ID, req)
+		}
+	}
+	_, err = s.CreateImageModelRoute(ctx, modelID, req)
+	return err
+}
+
+func (s *adminCatalogService) upsertVideoModelRoute(ctx context.Context, modelID uint64, providerID uint64, req VideoModelRouteRequest) error {
+	routes, err := s.repos.Videos.ListRoutes(ctx, modelID)
+	if err != nil {
+		return err
+	}
+	for _, route := range routes {
+		if route.ProviderID == providerID {
+			return s.UpdateVideoModelRoute(ctx, route.ID, req)
+		}
+	}
+	_, err = s.CreateVideoModelRoute(ctx, modelID, req)
+	return err
 }
 
 func (s *adminCatalogService) QueryUpstreamModels(ctx context.Context, req QueryUpstreamModelsRequest) ([]UpstreamModel, error) {

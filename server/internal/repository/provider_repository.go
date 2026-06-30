@@ -13,6 +13,7 @@ type ProviderRepository interface {
 	List(ctx context.Context, limit int, offset int) ([]model.Provider, error)
 	ListEnabled(ctx context.Context) ([]model.Provider, error)
 	FindByID(ctx context.Context, id uint64) (*model.Provider, error)
+	FindByCode(ctx context.Context, code string) (*model.Provider, error)
 	Create(ctx context.Context, provider *model.Provider) error
 	Update(ctx context.Context, id uint64, values map[string]interface{}) error
 	FindKeyByID(ctx context.Context, id uint64) (*model.ProviderKey, error)
@@ -52,6 +53,17 @@ func (r *GormProviderRepository) ListEnabled(ctx context.Context) ([]model.Provi
 func (r *GormProviderRepository) FindByID(ctx context.Context, id uint64) (*model.Provider, error) {
 	var provider model.Provider
 	if err := r.db.WithContext(ctx).First(&provider, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &provider, nil
+}
+
+func (r *GormProviderRepository) FindByCode(ctx context.Context, code string) (*model.Provider, error) {
+	var provider model.Provider
+	if err := r.db.WithContext(ctx).Where("code = ?", code).First(&provider).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrNotFound
 		}

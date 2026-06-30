@@ -90,6 +90,7 @@ func New(cfg config.Config, handlers handler.Handlers) *gin.Engine {
 			adminAPI.GET("/video-models/:id/routes", handlers.AdminCatalog.ListVideoModelRoutes)
 			adminAPI.POST("/video-models/:id/routes", handlers.AdminCatalog.CreateVideoModelRoute)
 			adminAPI.PUT("/video-model-routes/:id", handlers.AdminCatalog.UpdateVideoModelRoute)
+			adminAPI.POST("/upstream/integration", handlers.AdminCatalog.SaveUpstreamIntegration)
 			adminAPI.POST("/upstream/models/query", handlers.AdminCatalog.QueryUpstreamModels)
 			adminAPI.GET("/image-tasks", handlers.ImageTask.AdminList)
 			adminAPI.GET("/image-tasks/:task_no", handlers.ImageTask.AdminGet)

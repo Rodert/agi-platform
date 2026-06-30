@@ -46,6 +46,10 @@ type ImageProvider interface {
 	Generate(ctx context.Context, req ImageRequest) (*ImageResult, error)
 }
 
+type ImageCapabilityProvider interface {
+	SupportsImageGeneration() bool
+}
+
 type VideoProvider interface {
 	Type() string
 	CreateVideo(ctx context.Context, req VideoRequest) (*VideoCreateResult, error)
@@ -118,6 +122,7 @@ type VideoContentRequest struct {
 type VideoCreateResult struct {
 	TaskID      string
 	Status      string
+	URL         string
 	RawResponse string
 }
 
@@ -157,6 +162,13 @@ func (r *Registry) Get(providerType string) (ImageProvider, error) {
 		return nil, ErrProviderNotFound
 	}
 	return provider, nil
+}
+
+func SupportsImageGeneration(provider ImageProvider) bool {
+	if capable, ok := provider.(ImageCapabilityProvider); ok {
+		return capable.SupportsImageGeneration()
+	}
+	return true
 }
 
 func (r *Registry) GetVideo(providerType string) (VideoProvider, error) {

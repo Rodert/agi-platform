@@ -287,6 +287,7 @@ async function generateImage() {
 async function generateVideo() {
   await withLoading(async () => {
     validateVideoReferences();
+    validateSelectedVideoModelReferences();
     state.videoResult = await api.post<VideoTaskResult>("/api/videos/generate", {
       model: videoForm.model,
       prompt: videoForm.prompt,
@@ -363,6 +364,9 @@ function logout() {
 
 const selectedModel = computed(() => state.models.find((model) => model.code === generateForm.model));
 const selectedVideoModel = computed(() => state.videoModels.find((model) => model.code === videoForm.model));
+const selectedVideoReferencePolicy = computed(() => selectedVideoModel.value?.reference_policy);
+const selectedVideoRequiresOneImage = computed(() => selectedVideoReferencePolicy.value?.require_exactly_one_image === true);
+const selectedVideoMaxImages = computed(() => selectedVideoReferencePolicy.value?.max_reference_images || 4);
 const availableRatios = computed(() => openAIRatiosBySize[generateForm.resolution] ?? openAIRatiosBySize["2K"]);
 const selectedRequestSize = computed(() => requestSize(generateForm.resolution, generateForm.aspect_ratio));
 const combinedTasks = computed(() =>
@@ -507,11 +511,18 @@ function ensureVideoReferenceCapacity(kind: "image" | "video" | "audio", adding:
 }
 
 function ensureVideoReferenceLimit(kind: "image" | "video" | "audio", count: number) {
-  const limit = videoReferenceLimits[kind];
+  const limit = videoReferenceLimit(kind);
   if (count > limit) {
     const label = kind === "image" ? "参考图片" : kind === "video" ? "参考视频" : "参考音频";
     throw new Error(`${label}最多 ${limit} 个`);
   }
+}
+
+function videoReferenceLimit(kind: "image" | "video" | "audio") {
+  const policy = selectedVideoReferencePolicy.value;
+  if (kind === "image") return policy?.max_reference_images || videoReferenceLimits.image;
+  if (kind === "video") return policy?.max_reference_videos || videoReferenceLimits.video;
+  return policy?.max_reference_audios || videoReferenceLimits.audio;
 }
 
 function handleResolutionChange() {
@@ -538,6 +549,18 @@ function splitMediaList(value: string): string[] {
     .split(/\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function videoModelOptionLabel(model: VideoModel): string {
+  const suffix = model.reference_policy?.require_exactly_one_image ? " · 必须传 1 张参考图" : "";
+  return `${model.display_name} · ${model.price_credits} 积分/次${suffix}`;
+}
+
+function validateSelectedVideoModelReferences() {
+  if (!selectedVideoRequiresOneImage.value) return;
+  if (splitMediaList(videoForm.images).length !== 1) {
+    throw new Error("当前视频模型必须上传 1 张参考图");
+  }
 }
 
 function activeViewTitle() {
@@ -692,6 +715,8 @@ const App = {
       showPassword,
       selectedModel,
       selectedVideoModel,
+      selectedVideoRequiresOneImage,
+      selectedVideoMaxImages,
       combinedTasks,
       pagedTasks,
       taskHasNext,
@@ -718,6 +743,7 @@ const App = {
       taskCanRefresh,
       modelName,
       videoModelName,
+      videoModelOptionLabel,
       walletTypeText,
       signedCredits,
       formatDateTime,
@@ -919,13 +945,17 @@ const App = {
               <label>模型
                 <select v-model="videoForm.model">
                   <option v-for="model in state.videoModels" :key="model.id" :value="model.code">
-                    {{ model.display_name }} · {{ model.price_credits }} 积分/次
+                    {{ videoModelOptionLabel(model) }}
                   </option>
                 </select>
               </label>
               <div class="model-hint" v-if="selectedVideoModel">
-                <strong>{{ selectedVideoModel.display_name }}</strong>
+                <strong>
+                  {{ selectedVideoModel.display_name }}
+                  <span v-if="selectedVideoRequiresOneImage" class="required-badge">必须传 1 张参考图</span>
+                </strong>
                 <span>{{ selectedVideoModel.description }}</span>
+                <span v-if="selectedVideoRequiresOneImage" class="danger-hint">这个模型需要上传且只能上传 1 张参考图片。</span>
               </div>
               <label>提示词
                 <textarea v-model="videoForm.prompt" rows="7" />
@@ -945,9 +975,9 @@ const App = {
                 </label>
               </div>
               <label>参考图片
-                <span class="limit-line">已上传 {{ splitMediaList(videoForm.images).length }}/4</span>
+                <span class="limit-line">已上传 {{ splitMediaList(videoForm.images).length }}/{{ selectedVideoMaxImages }}</span>
                 <span class="upload-row">
-                  <input type="file" accept="image/*" :disabled="splitMediaList(videoForm.images).length >= 4" @change="uploadVideoReferenceFile($event, 'image')" />
+                  <input type="file" accept="image/*" :disabled="splitMediaList(videoForm.images).length >= selectedVideoMaxImages" @change="uploadVideoReferenceFile($event, 'image')" />
                 </span>
                 <div v-if="splitMediaList(videoForm.images).length" class="reference-list">
                   <div class="reference-list-heading">

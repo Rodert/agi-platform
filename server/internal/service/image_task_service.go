@@ -152,8 +152,12 @@ func (s *imageTaskService) prepareAndCreateTask(ctx context.Context, req Generat
 		return nil, fmt.Errorf("%w: provider is disabled", ErrInvalidRequest)
 	}
 
-	if _, err := s.providerHub.Get(upstream.Type); err != nil {
+	imageProvider, err := s.providerHub.Get(upstream.Type)
+	if err != nil {
 		return nil, err
+	}
+	if !provider.SupportsImageGeneration(imageProvider) {
+		return nil, fmt.Errorf("%w: provider %s does not support image generation", ErrInvalidRequest, upstream.Code)
 	}
 
 	var upstreamKey *model.ProviderKey

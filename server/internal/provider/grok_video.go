@@ -24,6 +24,10 @@ func (p *GrokVideoProvider) Type() string {
 	return "grok-video"
 }
 
+func (p *GrokVideoProvider) SupportsImageGeneration() bool {
+	return false
+}
+
 func (p *GrokVideoProvider) Generate(_ context.Context, _ ImageRequest) (*ImageResult, error) {
 	return nil, errors.New("grok-video provider does not support image generation")
 }
@@ -63,17 +67,18 @@ func (p *GrokVideoProvider) CreateVideo(ctx context.Context, req VideoRequest) (
 	if err != nil {
 		return nil, err
 	}
-	var parsed grokVideoCreateResponse
+	var parsed grokVideoStatusEnvelope
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, fmt.Errorf("decode grok video response: %w", err)
 	}
-	taskID := firstNonEmpty(parsed.TaskID, parsed.ID)
+	taskID := firstNonEmpty(parsed.TaskID, parsed.ID, parsed.Data.TaskID)
 	if taskID == "" {
 		return nil, errors.New("provider response did not include video task id")
 	}
 	return &VideoCreateResult{
 		TaskID:      taskID,
-		Status:      normalizeGrokVideoStatus(parsed.Status),
+		Status:      normalizeGrokVideoStatus(firstNonEmpty(parsed.Status, parsed.Data.Status)),
+		URL:         grokVideoResponseURL(parsed),
 		RawResponse: compactRawResponse(raw),
 	}, nil
 }
@@ -92,10 +97,10 @@ func (p *GrokVideoProvider) GetVideo(ctx context.Context, req VideoStatusRequest
 	}
 	progress := parseProgressPercent(parsed.Data.Progress)
 	result := &VideoStatusResult{
-		TaskID:       firstNonEmpty(parsed.Data.TaskID, req.TaskID),
-		Status:       normalizeGrokVideoStatus(parsed.Data.Status),
+		TaskID:       firstNonEmpty(parsed.Data.TaskID, parsed.TaskID, parsed.ID, req.TaskID),
+		Status:       normalizeGrokVideoStatus(firstNonEmpty(parsed.Data.Status, parsed.Status)),
 		Progress:     progress,
-		URL:          parsed.Data.ResultURL,
+		URL:          grokVideoResponseURL(parsed),
 		ErrorMessage: parsed.Data.FailReason,
 		RawResponse:  compactRawResponse(raw),
 	}
@@ -114,31 +119,39 @@ func (p *GrokVideoProvider) DownloadVideo(ctx context.Context, req VideoContentR
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, "", fmt.Errorf("decode grok video status before download: %w", err)
 	}
-	if parsed.Data.ResultURL == "" {
+	resultURL := grokVideoResponseURL(parsed)
+	if resultURL == "" {
 		return nil, "", NewResponseError("provider response did not include result_url", compactRawResponse(raw))
 	}
-	return downloadProviderContent(ctx, parsed.Data.ResultURL, req.TimeoutSeconds)
-}
-
-type grokVideoCreateResponse struct {
-	ID        string `json:"id"`
-	TaskID    string `json:"task_id"`
-	Object    string `json:"object"`
-	Model     string `json:"model"`
-	Status    string `json:"status"`
-	Progress  int    `json:"progress"`
-	CreatedAt int64  `json:"created_at"`
+	return downloadProviderContent(ctx, resultURL, req.TimeoutSeconds)
 }
 
 type grokVideoStatusEnvelope struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Data    struct {
+	ID        string   `json:"id"`
+	URL       string   `json:"url"`
+	Code      string   `json:"code"`
+	Status    string   `json:"status"`
+	Message   string   `json:"message"`
+	TaskID    string   `json:"task_id"`
+	Progress  int      `json:"progress"`
+	VideoURL  string   `json:"video_url"`
+	ResultURL string   `json:"result_url"`
+	Output    []string `json:"output"`
+	Video     struct {
+		URL string `json:"url"`
+	} `json:"video"`
+	Data struct {
 		TaskID     string `json:"task_id"`
 		Status     string `json:"status"`
 		Progress   string `json:"progress"`
 		ResultURL  string `json:"result_url"`
+		VideoURL   string `json:"video_url"`
+		URL        string `json:"url"`
 		FailReason string `json:"fail_reason"`
+		Video      struct {
+			URL string `json:"url"`
+		} `json:"video"`
+		Output []string `json:"output"`
 	} `json:"data"`
 }
 
@@ -170,7 +183,7 @@ func adjustedGrokSeconds(req VideoRequest) int {
 
 func normalizeGrokVideoStatus(status string) string {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case "SUCCESS":
+	case "SUCCESS", "SUCCEEDED", "COMPLETED", "COMPLETE", "DONE":
 		return "succeeded"
 	case "FAILURE", "FAILED", "FAIL":
 		return "failed"
@@ -181,6 +194,30 @@ func normalizeGrokVideoStatus(status string) string {
 	default:
 		return normalizeVideoStatus(status)
 	}
+}
+
+func grokVideoResponseURL(parsed grokVideoStatusEnvelope) string {
+	return firstNonEmpty(
+		parsed.ResultURL,
+		parsed.VideoURL,
+		parsed.URL,
+		parsed.Video.URL,
+		parsed.Data.ResultURL,
+		parsed.Data.VideoURL,
+		parsed.Data.URL,
+		parsed.Data.Video.URL,
+		firstString(parsed.Output),
+		firstString(parsed.Data.Output),
+	)
+}
+
+func firstString(values []string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func parseProgressPercent(value string) int {

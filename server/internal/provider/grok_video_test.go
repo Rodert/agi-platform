@@ -92,3 +92,59 @@ func TestGrokVideoProviderPollFailure(t *testing.T) {
 		t.Fatalf("unexpected failure status %+v", status)
 	}
 }
+
+func TestGrokVideoProviderParsesCompletedURLVariants(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"id":"task_WTmyjQzET5tlFIyep4SrrQbPWBpThyKr",
+			"url":"https://example.com/top.mp4",
+			"code":"success",
+			"data":{
+				"task_id":"task_WTmyjQzET5tlFIyep4SrrQbPWBpThyKr",
+				"status":"SUCCESS",
+				"progress":"100%",
+				"result_url":"https://example.com/data-result.mp4"
+			},
+			"video":{"url":"https://example.com/video.mp4"},
+			"output":["https://example.com/output.mp4"],
+			"status":"completed",
+			"task_id":"task_WTmyjQzET5tlFIyep4SrrQbPWBpThyKr",
+			"progress":100,
+			"video_url":"https://example.com/video-url.mp4",
+			"result_url":"https://example.com/result.mp4"
+		}`))
+	}))
+	defer server.Close()
+
+	provider := NewGrokVideoProvider()
+	created, err := provider.CreateVideo(context.Background(), VideoRequest{
+		BaseURL:     server.URL,
+		APIKey:      "test-key",
+		Model:       "grok-image-video",
+		Prompt:      "test",
+		Seconds:     15,
+		AspectRatio: "16:9",
+	})
+	if err != nil {
+		t.Fatalf("create video: %v", err)
+	}
+	if created.Status != "succeeded" {
+		t.Fatalf("expected succeeded, got %s", created.Status)
+	}
+	if created.URL != "https://example.com/result.mp4" {
+		t.Fatalf("unexpected create url %s", created.URL)
+	}
+
+	status, err := provider.GetVideo(context.Background(), VideoStatusRequest{
+		BaseURL: server.URL,
+		APIKey:  "test-key",
+		TaskID:  created.TaskID,
+	})
+	if err != nil {
+		t.Fatalf("get video: %v", err)
+	}
+	if status.Status != "succeeded" || status.Progress != 100 || status.URL != "https://example.com/result.mp4" {
+		t.Fatalf("unexpected status %+v", status)
+	}
+}

@@ -14,6 +14,7 @@ type VideoRepository interface {
 	ListModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error)
 	ListAllModels(ctx context.Context, limit int, offset int) ([]model.VideoModel, error)
 	FindModelByCode(ctx context.Context, code string) (*model.VideoModel, error)
+	FindAnyModelByCode(ctx context.Context, code string) (*model.VideoModel, error)
 	CreateModel(ctx context.Context, videoModel *model.VideoModel) error
 	UpdateModel(ctx context.Context, id uint64, values map[string]interface{}) error
 	DeleteModel(ctx context.Context, tx Tx, id uint64) error
@@ -69,6 +70,20 @@ func (r *GormVideoRepository) FindModelByCode(ctx context.Context, code string) 
 	var videoModel model.VideoModel
 	err := r.db.WithContext(ctx).
 		Where("code = ? AND enabled = ?", code, true).
+		First(&videoModel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &videoModel, nil
+}
+
+func (r *GormVideoRepository) FindAnyModelByCode(ctx context.Context, code string) (*model.VideoModel, error) {
+	var videoModel model.VideoModel
+	err := r.db.WithContext(ctx).
+		Where("code = ?", code).
 		First(&videoModel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

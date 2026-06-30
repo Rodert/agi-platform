@@ -140,6 +140,12 @@ export type VideoModel = {
   enabled: boolean;
   recommended: boolean;
   sort_order: number;
+  reference_policy?: {
+    require_exactly_one_image: boolean;
+    max_reference_images: number;
+    max_reference_videos: number;
+    max_reference_audios: number;
+  };
 };
 
 export type VideoModelRoute = {

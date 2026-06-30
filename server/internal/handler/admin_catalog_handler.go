@@ -30,6 +30,7 @@ type AdminCatalogHandler interface {
 	ListVideoModelRoutes(c *gin.Context)
 	CreateVideoModelRoute(c *gin.Context)
 	UpdateVideoModelRoute(c *gin.Context)
+	SaveUpstreamIntegration(c *gin.Context)
 	QueryUpstreamModels(c *gin.Context)
 }
 
@@ -110,6 +111,53 @@ type videoModelRouteRequest struct {
 type queryUpstreamModelsRequest struct {
 	BaseURL string `json:"base_url" binding:"required"`
 	APIKey  string `json:"api_key" binding:"required"`
+}
+
+type upstreamIntegrationRequest struct {
+	Provider providerRequest                   `json:"provider" binding:"required"`
+	APIKey   *providerKeyRequest               `json:"api_key"`
+	Models   []upstreamIntegrationModelRequest `json:"models" binding:"required"`
+}
+
+type upstreamIntegrationModelRequest struct {
+	ModelType         string                       `json:"model_type" binding:"required"`
+	ProviderKeyID     *uint64                      `json:"provider_key_id"`
+	ProviderModelName string                       `json:"provider_model_name" binding:"required"`
+	Enabled           bool                         `json:"enabled"`
+	Priority          int                          `json:"priority"`
+	Weight            int                          `json:"weight"`
+	ExtraConfig       map[string]interface{}       `json:"extra_config"`
+	ImageModel        integrationImageModelRequest `json:"image_model"`
+	VideoModel        integrationVideoModelRequest `json:"video_model"`
+}
+
+type integrationImageModelRequest struct {
+	Code                string   `json:"code"`
+	DisplayName         string   `json:"display_name"`
+	Description         string   `json:"description"`
+	CoverURL            string   `json:"cover_url"`
+	PriceCredits        int64    `json:"price_credits"`
+	SupportedSizes      []string `json:"supported_sizes"`
+	SupportTextToImage  bool     `json:"support_text_to_image"`
+	SupportImageToImage bool     `json:"support_image_to_image"`
+	SupportEdit         bool     `json:"support_edit"`
+	MaxImagesPerRequest int      `json:"max_images_per_request"`
+	AutoRefundOnFailure bool     `json:"auto_refund_on_failure"`
+	Enabled             bool     `json:"enabled"`
+	Recommended         bool     `json:"recommended"`
+	SortOrder           int      `json:"sort_order"`
+}
+
+type integrationVideoModelRequest struct {
+	Code                  string   `json:"code"`
+	DisplayName           string   `json:"display_name"`
+	Description           string   `json:"description"`
+	PriceCredits          int64    `json:"price_credits"`
+	SupportedAspectRatios []string `json:"supported_aspect_ratios"`
+	SupportedSeconds      []int    `json:"supported_seconds"`
+	Enabled               bool     `json:"enabled"`
+	Recommended           bool     `json:"recommended"`
+	SortOrder             int      `json:"sort_order"`
 }
 
 func NewAdminCatalogHandler(service service.AdminCatalogService) AdminCatalogHandler {
@@ -386,6 +434,42 @@ func (h *adminCatalogHandler) UpdateVideoModelRoute(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"updated": true})
+}
+
+func (h *adminCatalogHandler) SaveUpstreamIntegration(c *gin.Context) {
+	var req upstreamIntegrationRequest
+	if !bindJSON(c, &req) {
+		return
+	}
+	items := make([]service.UpstreamIntegrationModelRequest, 0, len(req.Models))
+	for _, item := range req.Models {
+		items = append(items, service.UpstreamIntegrationModelRequest{
+			ModelType:         item.ModelType,
+			ProviderKeyID:     item.ProviderKeyID,
+			ProviderModelName: item.ProviderModelName,
+			Enabled:           item.Enabled,
+			Priority:          item.Priority,
+			Weight:            item.Weight,
+			ExtraConfig:       item.ExtraConfig,
+			ImageModel:        service.ImageModelRequest(item.ImageModel),
+			VideoModel:        service.VideoModelRequest(item.VideoModel),
+		})
+	}
+	var key *service.ProviderKeyRequest
+	if req.APIKey != nil {
+		value := service.ProviderKeyRequest(*req.APIKey)
+		key = &value
+	}
+	result, err := h.service.SaveUpstreamIntegration(c.Request.Context(), service.UpstreamIntegrationRequest{
+		Provider: service.ProviderRequest(req.Provider),
+		APIKey:   key,
+		Models:   items,
+	})
+	if err != nil {
+		writeServiceError(c, err)
+		return
+	}
+	response.OK(c, result)
 }
 
 func (h *adminCatalogHandler) QueryUpstreamModels(c *gin.Context) {
