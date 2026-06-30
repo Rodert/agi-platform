@@ -233,7 +233,7 @@ func (s *imageTaskService) runPreparedTask(ctx context.Context, prepared *prepar
 
 	adapter, err := s.providerHub.Get(prepared.upstream.Type)
 	if err != nil {
-		_ = s.markFailedAndRefund(ctx, task, prepared.imageModel.AutoRefundOnFailure, err)
+		_ = s.markFailedAndRefund(ctx, task, prepared.imageModel.AutoRefundOnFailure, err, provider.ResponseErrorRaw(err))
 		return nil, err
 	}
 
@@ -539,12 +539,15 @@ func extensionForMimeType(mimeType string) string {
 	}
 }
 
-func (s *imageTaskService) markFailedAndRefund(ctx context.Context, task *model.ImageTask, shouldRefund bool, cause error) error {
+func (s *imageTaskService) markFailedAndRefund(ctx context.Context, task *model.ImageTask, shouldRefund bool, cause error, rawResponse ...string) error {
 	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
 		now := time.Now()
 		values := map[string]interface{}{
 			"error_message": cause.Error(),
 			"completed_at":  now,
+		}
+		if raw := firstNonEmptyString(rawResponse...); raw != "" {
+			values["provider_response"] = datatypes.JSON([]byte(safeJSON(raw)))
 		}
 
 		if shouldRefund {

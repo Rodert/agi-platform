@@ -180,12 +180,12 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 	_ = s.repos.Videos.UpdateTaskStatus(ctx, nil, task.ID, model.VideoTaskStatusRunning, 5, map[string]interface{}{"started_at": now})
 	adapter, err := s.providerHub.GetVideo(prepared.upstream.Type)
 	if err != nil {
-		_ = s.markVideoFailedAndRefund(ctx, task, err)
+		_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 		return
 	}
 	images, videos, audios, err := s.normalizeVideoReferences(prepared.req.Images, prepared.req.Videos, prepared.req.Audios, prepared.req.AppBaseURL)
 	if err != nil {
-		_ = s.markVideoFailedAndRefund(ctx, task, err)
+		_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 		return
 	}
 	created, err := adapter.CreateVideo(ctx, provider.VideoRequest{
@@ -203,7 +203,7 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 		Extra:          prepared.extraConfig,
 	})
 	if err != nil {
-		_ = s.markVideoFailedAndRefund(ctx, task, err)
+		_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 		return
 	}
 	task.ProviderTaskID = created.TaskID
@@ -227,7 +227,7 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 			TimeoutSeconds: prepared.upstream.TimeoutSeconds,
 		})
 		if err != nil {
-			_ = s.markVideoFailedAndRefund(ctx, task, err)
+			_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 			return
 		}
 		status = statusResult.Status
@@ -250,7 +250,7 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 		TimeoutSeconds: prepared.upstream.TimeoutSeconds,
 	})
 	if err != nil {
-		_ = s.markVideoFailedAndRefund(ctx, task, err)
+		_ = s.markVideoFailedAndRefund(ctx, task, err, provider.ResponseErrorRaw(err))
 		return
 	}
 	if err := s.markVideoSucceeded(ctx, task, prepared.videoModel.ID, content, mimeType, statusResult); err != nil {
@@ -306,6 +306,7 @@ func (s *videoService) markVideoSucceeded(ctx context.Context, task *model.Video
 	if statusResult != nil {
 		raw = safeJSON(statusResult.RawResponse)
 	}
+	raw = videoResponseWithContentSummary(raw, len(content), mimeType)
 	now := time.Now()
 	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
 		if err := s.repos.Videos.UpdateTaskStatus(ctx, tx, task.ID, model.VideoTaskStatusSucceeded, 100, map[string]interface{}{
@@ -408,10 +409,13 @@ func (s *videoService) normalizeAssetReferences(values []string, appBaseURL stri
 	return normalized, nil
 }
 
-func (s *videoService) markVideoFailedAndRefund(ctx context.Context, task *model.VideoTask, cause error) error {
+func (s *videoService) markVideoFailedAndRefund(ctx context.Context, task *model.VideoTask, cause error, rawResponse ...string) error {
 	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
 		now := time.Now()
 		values := map[string]interface{}{"error_message": cause.Error(), "completed_at": now}
+		if raw := firstNonEmptyString(rawResponse...); raw != "" {
+			values["provider_response"] = datatypes.JSON([]byte(safeJSON(raw)))
+		}
 		if task.RefundStatus != "refunded" {
 			before, err := s.repos.Users.FindByID(ctx, task.UserID)
 			if err != nil {
@@ -503,6 +507,23 @@ func safeJSON(value string) string {
 		return value
 	}
 	return "{}"
+}
+
+func videoResponseWithContentSummary(raw string, contentLength int, contentType string) string {
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(safeJSON(raw)), &payload); err != nil || payload == nil {
+		payload = map[string]interface{}{}
+	}
+	payload["content"] = map[string]interface{}{
+		"length_bytes": contentLength,
+		"content_type": contentType,
+		"stored":       false,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return safeJSON(raw)
+	}
+	return string(encoded)
 }
 
 func nonNilStringSlice(values []string) []string {

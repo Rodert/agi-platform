@@ -3,10 +3,43 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 )
 
 var ErrProviderNotFound = errors.New("provider adapter not found")
+
+type ResponseError struct {
+	Message     string
+	RawResponse string
+}
+
+func (e *ResponseError) Error() string {
+	return e.Message
+}
+
+func NewResponseError(message string, rawResponse string) error {
+	return &ResponseError{Message: message, RawResponse: rawResponse}
+}
+
+func ResponseErrorRaw(err error) string {
+	var responseErr *ResponseError
+	if errors.As(err, &responseErr) {
+		return responseErr.RawResponse
+	}
+	return ""
+}
+
+func NewHTTPResponseError(label string, statusCode int, rawResponse string) error {
+	return NewResponseError(fmt.Sprintf("%s: status=%d body=%s", label, statusCode, truncateForError(rawResponse, 1000)), rawResponse)
+}
+
+func truncateForError(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
+}
 
 type ImageProvider interface {
 	Type() string

@@ -65,7 +65,10 @@ func (p *OpenAICompatibleProvider) Generate(ctx context.Context, req ImageReques
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("provider request failed: status=%d body=%s", resp.StatusCode, truncate(string(raw), 1000))
+		return nil, NewHTTPResponseError("provider request failed", resp.StatusCode, compactRawResponse(raw))
+	}
+	if err := providerBusinessError(raw); err != nil {
+		return nil, err
 	}
 
 	var parsed openAIImageResponse
@@ -185,7 +188,7 @@ func (p *OpenAICompatibleProvider) DownloadVideo(ctx context.Context, req VideoC
 		return nil, "", err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, "", fmt.Errorf("provider video content failed: status=%d body=%s", resp.StatusCode, truncate(string(raw), 1000))
+		return nil, "", NewHTTPResponseError("provider video content failed", resp.StatusCode, compactRawResponse(raw))
 	}
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
@@ -216,7 +219,10 @@ func (p *OpenAICompatibleProvider) doJSON(ctx context.Context, method string, en
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("provider request failed: status=%d body=%s", resp.StatusCode, truncate(string(raw), 1000))
+		return nil, NewHTTPResponseError("provider request failed", resp.StatusCode, compactRawResponse(raw))
+	}
+	if err := providerBusinessError(raw); err != nil {
+		return nil, err
 	}
 	return raw, nil
 }
@@ -246,9 +252,49 @@ type openAIVideoResponse struct {
 	} `json:"error"`
 }
 
+type providerEnvelope struct {
+	Code    *int            `json:"code"`
+	Message string          `json:"message"`
+	Error   json.RawMessage `json:"error"`
+}
+
+type providerErrorPayload struct {
+	Code    string `json:"code"`
+	Type    string `json:"type"`
+	Message string `json:"message"`
+}
+
+func providerBusinessError(raw []byte) error {
+	var envelope providerEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil || envelope.Code == nil || providerBusinessCodeOK(*envelope.Code) {
+		return nil
+	}
+	message := strings.TrimSpace(envelope.Message)
+	if message == "" && len(envelope.Error) > 0 && string(envelope.Error) != "null" {
+		var payload providerErrorPayload
+		if err := json.Unmarshal(envelope.Error, &payload); err == nil {
+			message = firstNonEmpty(strings.TrimSpace(payload.Message), strings.TrimSpace(payload.Type), strings.TrimSpace(payload.Code))
+		}
+		if message == "" {
+			message = string(envelope.Error)
+		}
+	}
+	if message == "" {
+		message = "provider returned non-zero code"
+	}
+	return NewResponseError(
+		fmt.Sprintf("provider request failed: code=%d message=%s", *envelope.Code, truncate(message, 1000)),
+		compactRawResponse(raw),
+	)
+}
+
+func providerBusinessCodeOK(code int) bool {
+	return code == 0 || (code >= 200 && code < 300)
+}
+
 func compactImageResponseRaw(parsed openAIImageResponse, raw []byte) string {
-	if len(raw) <= 64*1024 && !responseContainsB64(parsed) {
-		return string(raw)
+	if !responseContainsB64(parsed) {
+		return compactRawResponse(raw)
 	}
 	items := make([]map[string]interface{}, 0, len(parsed.Data))
 	for _, item := range parsed.Data {
@@ -263,6 +309,21 @@ func compactImageResponseRaw(parsed openAIImageResponse, raw []byte) string {
 		"task_id": parsed.TaskID,
 		"status":  parsed.Status,
 		"data":    items,
+	}
+	encoded, err := json.Marshal(compact)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+func compactRawResponse(raw []byte) string {
+	if len(raw) <= 64*1024 {
+		return string(raw)
+	}
+	compact := map[string]interface{}{
+		"truncated":    true,
+		"length_bytes": len(raw),
 	}
 	encoded, err := json.Marshal(compact)
 	if err != nil {

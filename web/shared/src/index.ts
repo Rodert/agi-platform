@@ -108,6 +108,8 @@ export type ImageTask = {
   status: string;
   progress: number;
   credits_used: number;
+  provider_request_id: string;
+  provider_response?: unknown;
   error_message: string;
   created_at: string;
 };
@@ -167,6 +169,8 @@ export type VideoTask = {
   status: string;
   progress: number;
   credits_used: number;
+  provider_task_id: string;
+  provider_response?: unknown;
   error_message: string;
   created_at: string;
 };

@@ -1159,6 +1159,10 @@ function requestJSON(payload: unknown) {
   return JSON.stringify(payload, null, 2);
 }
 
+function providerResponsePayload(task: ImageTask | VideoTask) {
+  return task.provider_response || {};
+}
+
 async function copyJSON(payload: unknown) {
   const text = requestJSON(payload);
   await copyText(text);
@@ -1305,6 +1309,7 @@ const App = {
       imageTaskRequestPayload,
       videoTaskRequestParams,
       videoTaskRequestPayload,
+      providerResponsePayload,
       requestJSON,
       copyJSON,
       copyText,
@@ -1942,6 +1947,15 @@ const App = {
                 </div>
                 <pre class="request-json">{{ requestJSON(imageTaskRequestPayload(state.selectedTask.task)) }}</pre>
               </div>
+              <div class="request-param-panel">
+                <div class="request-param-heading">
+                  <h3>上游返回</h3>
+                  <button class="small-button" type="button" @click="copyJSON(providerResponsePayload(state.selectedTask.task))">
+                    {{ state.copiedJSON === 'copied' ? '已复制' : state.copiedJSON === 'failed' ? '复制失败' : '复制 JSON' }}
+                  </button>
+                </div>
+                <pre class="request-json">{{ requestJSON(providerResponsePayload(state.selectedTask.task)) }}</pre>
+              </div>
               <p class="prompt-detail">{{ state.selectedTask.task.prompt }}</p>
               <p v-if="state.selectedTask.task.error_message" class="error">{{ state.selectedTask.task.error_message }}</p>
               <div v-if="!state.selectedTask.images.length" class="empty-state">
@@ -1988,6 +2002,15 @@ const App = {
                   </div>
                 </div>
                 <pre class="request-json">{{ requestJSON(videoTaskRequestPayload(state.selectedVideoTask.task)) }}</pre>
+              </div>
+              <div class="request-param-panel">
+                <div class="request-param-heading">
+                  <h3>上游返回</h3>
+                  <button class="small-button" type="button" @click="copyJSON(providerResponsePayload(state.selectedVideoTask.task))">
+                    {{ state.copiedJSON === 'copied' ? '已复制' : state.copiedJSON === 'failed' ? '复制失败' : '复制 JSON' }}
+                  </button>
+                </div>
+                <pre class="request-json">{{ requestJSON(providerResponsePayload(state.selectedVideoTask.task)) }}</pre>
               </div>
               <p class="prompt-detail">{{ state.selectedVideoTask.task.prompt }}</p>
               <p v-if="state.selectedVideoTask.task.error_message" class="error">{{ state.selectedVideoTask.task.error_message }}</p>
