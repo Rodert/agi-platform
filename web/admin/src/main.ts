@@ -106,6 +106,7 @@ type UpstreamModelConfig = {
   max_images_per_request: number;
   supported_aspect_ratios: string;
   supported_seconds: string;
+  extra_config: string;
   priority: number;
   enabled: boolean;
   expanded: boolean;
@@ -142,6 +143,7 @@ const upstreamForm = reactive({
   price_credits: 8,
   supported_sizes: defaultImageSupportedSizes,
   max_images_per_request: 4,
+  extra_config: "",
   timeout_seconds: 120,
   priority: 100,
   enabled: true
@@ -729,6 +731,19 @@ function applyDefaultVideoModel() {
   state.upstreamModelConfigs = [modelConfigFromForm(true, "video")];
 }
 
+function applyDefaultGrokVideoModels() {
+  Object.assign(upstreamForm, {
+    provider_code: "grok-video",
+    provider_name: "Grok Video",
+    provider_type: "grok-video",
+    base_url: upstreamForm.base_url || "https://api.119337.xyz"
+  });
+  state.upstreamModelConfigs = [
+    modelConfigFromName("grok-image-video", true),
+    modelConfigFromName("grok-video-1.5", false)
+  ];
+}
+
 async function queryUpstreamModels() {
   state.queryingUpstreamModels = true;
   state.error = "";
@@ -774,6 +789,7 @@ function modelConfigFromForm(expanded = false, modelType: "image" | "video" = "i
     max_images_per_request: modelType === "video" ? 1 : Number(upstreamForm.max_images_per_request) || 4,
     supported_aspect_ratios: defaultVideoAspectRatios,
     supported_seconds: defaultVideoSeconds,
+    extra_config: "",
     priority: Number(upstreamForm.priority) || 100,
     enabled: upstreamForm.enabled,
     expanded
@@ -794,6 +810,7 @@ function modelConfigFromName(model: string, expanded = false): UpstreamModelConf
     max_images_per_request: modelType === "video" ? 1 : 4,
     supported_aspect_ratios: defaultVideoAspectRatios,
     supported_seconds: defaultVideoSeconds,
+    extra_config: defaultExtraConfigForModel(model, modelType),
     priority: Number(upstreamForm.priority) || 100,
     enabled: true,
     expanded
@@ -874,7 +891,7 @@ function modelRoutePayload(providerID: number, config: UpstreamModelConfig) {
     enabled: upstreamForm.enabled && config.enabled,
     priority: Number(config.priority) || Number(upstreamForm.priority) || 100,
     weight: 100,
-    extra_config: {}
+    extra_config: parseExtraConfig(config.extra_config)
   };
 }
 
@@ -900,6 +917,7 @@ async function configsForProvider(provider: Provider): Promise<UpstreamModelConf
         max_images_per_request: model.max_images_per_request ?? 4,
         supported_aspect_ratios: defaultVideoAspectRatios,
         supported_seconds: defaultVideoSeconds,
+        extra_config: formatExtraConfig(route.extra_config),
         priority: route.priority || provider.priority || 100,
         enabled: provider.enabled && model.enabled && route.enabled,
         expanded: configs.length === 0
@@ -922,6 +940,7 @@ async function configsForProvider(provider: Provider): Promise<UpstreamModelConf
         max_images_per_request: 1,
         supported_aspect_ratios: formatList(model.supported_aspect_ratios, defaultVideoAspectRatios),
         supported_seconds: formatList(model.supported_seconds, defaultVideoSeconds),
+        extra_config: formatExtraConfig(route.extra_config),
         priority: route.priority || provider.priority || 100,
         enabled: provider.enabled && model.enabled && route.enabled,
         expanded: configs.length === 0
@@ -937,6 +956,44 @@ function formatSupportedSizes(value: ImageModel["supported_sizes"] | undefined):
 
 function formatList(value: unknown, fallback: string): string {
   return Array.isArray(value) && value.length ? value.map(String).join(",") : fallback;
+}
+
+function defaultExtraConfigForModel(model: string, modelType: "image" | "video") {
+  if (modelType !== "video") return "";
+  if (model === "grok-video-1.5") {
+    return requestJSON({
+      resolution: "720p",
+      max_reference_images: 1,
+      require_exactly_one_image: true,
+      image_field: "image_urls"
+    });
+  }
+  if (model === "grok-image-video") {
+    return requestJSON({
+      resolution: "720p",
+      max_reference_images: 7,
+      multi_image_max_seconds: 10,
+      image_field: "image_urls"
+    });
+  }
+  return "";
+}
+
+function formatExtraConfig(value: unknown) {
+  if (!value || (typeof value === "object" && !Object.keys(value as Record<string, unknown>).length)) {
+    return "";
+  }
+  return requestJSON(value);
+}
+
+function parseExtraConfig(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    throw new Error("扩展配置必须是合法 JSON");
+  }
 }
 
 function displayNameFromModel(model: string): string {
@@ -1351,6 +1408,7 @@ const App = {
       closeUpstreamModal,
       applyDefaultImageModel,
       applyDefaultVideoModel,
+      applyDefaultGrokVideoModels,
       queryUpstreamModels,
       applyUpstreamModel,
       toggleModelConfig,
@@ -1661,6 +1719,7 @@ const App = {
                       <select v-model="upstreamForm.provider_type">
                         <option value="openai-compatible">OpenAI 兼容接口（图片/视频）</option>
                         <option value="openai">OpenAI</option>
+                        <option value="grok-video">Grok 视频接口</option>
                         <option value="mock">Mock</option>
                       </select>
                     </label>
@@ -1673,6 +1732,7 @@ const App = {
                       </button>
                       <button class="ghost-button" type="button" @click="applyDefaultImageModel">填入默认生图模型</button>
                       <button class="ghost-button" type="button" @click="applyDefaultVideoModel">填入默认视频模型</button>
+                      <button class="ghost-button" type="button" @click="applyDefaultGrokVideoModels">填入 Grok 视频模型</button>
                       <span v-if="state.upstreamModelConfigs.length">已导入 {{ state.upstreamModelConfigs.length }} 个模型</span>
                     </div>
                   </div>
@@ -1720,6 +1780,9 @@ const App = {
                         </label>
                         <label v-if="config.model_type === 'video'">支持时长秒数
                           <input v-model="config.supported_seconds" placeholder="15" />
+                        </label>
+                        <label v-if="config.model_type === 'video'" class="span-two">扩展配置 JSON
+                          <textarea v-model="config.extra_config" rows="5" placeholder='{"resolution":"720p"}' />
                         </label>
                         <label class="span-two">模型描述<textarea v-model="config.description" rows="3" /></label>
                       </div>

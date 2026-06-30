@@ -28,6 +28,7 @@ func Run() error {
 	providers.Register(provider.NewMockProvider())
 	providers.Register(provider.NewOpenAICompatibleProvider("openai-compatible"))
 	providers.Register(provider.NewOpenAICompatibleProvider("openai"))
+	providers.Register(provider.NewGrokVideoProvider())
 	authManager := auth.NewManager(auth.Config{
 		JWTSecret:     cfg.Auth.JWTSecret,
 		TokenLifetime: cfg.Auth.TokenLifetime,

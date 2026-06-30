@@ -198,33 +198,7 @@ func (p *OpenAICompatibleProvider) DownloadVideo(ctx context.Context, req VideoC
 }
 
 func (p *OpenAICompatibleProvider) doJSON(ctx context.Context, method string, endpoint string, apiKey string, contentType string, body []byte, timeoutSeconds int) ([]byte, error) {
-	timeout := time.Duration(defaultTimeoutSeconds(timeoutSeconds)) * time.Second
-	httpReq, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
-	httpReq.Header.Set("Accept", "application/json")
-	if body != nil {
-		httpReq.Header.Set("Content-Type", contentType)
-	}
-	client := &http.Client{Timeout: timeout}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, NewHTTPResponseError("provider request failed", resp.StatusCode, compactRawResponse(raw))
-	}
-	if err := providerBusinessError(raw); err != nil {
-		return nil, err
-	}
-	return raw, nil
+	return doProviderJSON(ctx, method, endpoint, apiKey, contentType, body, timeoutSeconds)
 }
 
 type openAIImageResponse struct {
