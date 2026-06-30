@@ -549,7 +549,7 @@ function activeViewTitle() {
   if (state.activeView === "wallet") return "积分流水";
   if (state.activeView === "keys") return "API Key";
   if (state.activeView === "profile") return "个人中心";
-  return "API 接入";
+  return "API 文档";
 }
 
 function taskStatusText(status: string) {
@@ -701,6 +701,7 @@ const App = {
       videoSecondOptions,
       availableRatios,
       selectedRequestSize,
+      apiBaseURL,
       formatCredits,
       parseJSONList,
       loadMe,
@@ -771,7 +772,7 @@ const App = {
           <KeyRound :size="18" /> API Key
         </button>
         <button class="nav-item" :class="{ active: state.activeView === 'docs' }" @click="setActiveView('docs')">
-          <Code2 :size="18" /> API 接入
+          <Code2 :size="18" /> API 文档
         </button>
         <button class="nav-item" :class="{ active: state.activeView === 'profile' }" @click="setActiveView('profile')">
           <UserCircle :size="18" /> 个人中心
@@ -832,7 +833,7 @@ const App = {
 
           <p v-if="state.error" class="error">{{ state.error }}</p>
 
-          <div v-if="state.activeView === 'create'" class="workspace">
+          <div v-if="state.activeView === 'create'" class="workspace studio-workspace image-studio">
             <section class="panel controls">
               <label>模型
                 <select v-model="generateForm.model">
@@ -913,7 +914,7 @@ const App = {
             </section>
           </div>
 
-          <div v-if="state.activeView === 'video'" class="workspace">
+          <div v-if="state.activeView === 'video'" class="workspace studio-workspace video-studio">
             <section class="panel controls">
               <label>模型
                 <select v-model="videoForm.model">
@@ -1208,18 +1209,119 @@ const App = {
             </table>
           </section>
 
-          <section v-if="state.activeView === 'docs'" class="panel docs-panel">
-            <h2>OpenAI 风格接口</h2>
-            <pre>POST /v1/images/generations
-Authorization: Bearer agi_xxx
+          <section v-if="state.activeView === 'docs'" class="docs-page">
+            <div class="docs-hero">
+              <div>
+                <h2>API 文档</h2>
+                <p>使用 API Key 调用平台图片和视频生成能力，接口风格兼容 OpenAI 常见调用方式。</p>
+              </div>
+              <a class="ghost-button" href="#api-quickstart">快速开始</a>
+            </div>
 
-{
-  "model": "general-high-quality",
-  "prompt": "一张科技感海报",
-  "size": "1024x1024",
-  "n": 1,
-  "reference_images": [{"url": "https://example.com/reference.png"}]
-}</pre>
+            <div class="docs-layout">
+              <aside class="docs-toc">
+                <a href="#api-quickstart">快速开始</a>
+                <a href="#api-auth">鉴权</a>
+                <a href="#api-image">图片生成</a>
+                <a href="#api-video">视频生成</a>
+                <a href="#api-errors">错误处理</a>
+              </aside>
+
+              <div class="docs-content">
+                <article id="api-quickstart" class="doc-section">
+                  <h3>快速开始</h3>
+                  <p>先在“API Key”页面创建密钥，然后在请求头中使用 Bearer Token。</p>
+                  <pre><code>curl {{ apiBaseURL }}/health</code></pre>
+                </article>
+
+                <article id="api-auth" class="doc-section">
+                  <h3>鉴权</h3>
+                  <p>所有外部开放接口都需要传入 API Key。</p>
+                  <div class="param-table">
+                    <div><strong>Header</strong><span>Authorization</span></div>
+                    <div><strong>格式</strong><span>Bearer agi_xxx</span></div>
+                    <div><strong>Content-Type</strong><span>application/json</span></div>
+                  </div>
+                  <pre><code>Authorization: Bearer agi_xxx
+Content-Type: application/json</code></pre>
+                </article>
+
+                <article id="api-image" class="doc-section">
+                  <h3>图片生成</h3>
+                  <p>提交图片生成请求，响应会返回平台任务和生成结果。参考图建议使用公网可访问 URL。</p>
+                  <div class="endpoint-line"><span>POST</span><code>/v1/images/generations</code></div>
+                  <div class="param-table">
+                    <div><strong>model</strong><span>必填，模型编码</span></div>
+                    <div><strong>prompt</strong><span>必填，图片提示词</span></div>
+                    <div><strong>size</strong><span>如 1024x1024、2048x2048、1536x1024</span></div>
+                    <div><strong>n</strong><span>生成张数，受模型配置限制</span></div>
+                    <div><strong>reference_images</strong><span>可选，参考图 URL 或对象数组</span></div>
+                  </div>
+                  <pre><code>curl -X POST {{ apiBaseURL }}/v1/images/generations \\
+  -H "Authorization: Bearer agi_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-image-2",
+    "prompt": "一张科技感十足的 AI 芯片海报，蓝黑色背景，电影光效",
+    "size": "2048x2048",
+    "n": 1,
+    "reference_images": []
+  }'</code></pre>
+                </article>
+
+                <article id="api-video" class="doc-section">
+                  <h3>视频生成</h3>
+                  <p>视频是异步任务。先创建任务，再轮询状态；成功后可通过 content 接口播放或下载 mp4。</p>
+                  <div class="endpoint-stack">
+                    <div class="endpoint-line"><span>POST</span><code>/v1/videos</code></div>
+                    <div class="endpoint-line"><span>GET</span><code>/v1/videos/{task_id}</code></div>
+                    <div class="endpoint-line"><span>GET</span><code>/v1/videos/{task_id}/content</code></div>
+                  </div>
+                  <div class="param-table">
+                    <div><strong>model</strong><span>必填，视频模型编码</span></div>
+                    <div><strong>prompt</strong><span>必填，视频提示词</span></div>
+                    <div><strong>seconds</strong><span>支持 5、10、15 秒</span></div>
+                    <div><strong>aspect_ratio</strong><span>9:16、16:9、1:1</span></div>
+                    <div><strong>images/videos/audios</strong><span>可选，参考素材 URL 数组</span></div>
+                  </div>
+                  <pre><code>curl -X POST {{ apiBaseURL }}/v1/videos \\
+  -H "Authorization: Bearer agi_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "video-ds-2.0-fast",
+    "prompt": "A cinematic 9:16 video of a cat running through warm sunlight",
+    "seconds": 15,
+    "aspect_ratio": "9:16",
+    "images": [],
+    "videos": [],
+    "audios": []
+  }'
+
+curl {{ apiBaseURL }}/v1/videos/{task_id} \\
+  -H "Authorization: Bearer agi_xxx"
+
+curl -L {{ apiBaseURL }}/v1/videos/{task_id}/content \\
+  -H "Authorization: Bearer agi_xxx" \\
+  -o result.mp4</code></pre>
+                </article>
+
+                <article id="api-errors" class="doc-section">
+                  <h3>错误处理</h3>
+                  <p>客户端应同时判断 HTTP 状态码和响应体里的 code/message。</p>
+                  <div class="param-table">
+                    <div><strong>401</strong><span>API Key 缺失或无效</span></div>
+                    <div><strong>402</strong><span>积分不足</span></div>
+                    <div><strong>404</strong><span>任务或模型不存在</span></div>
+                    <div><strong>429</strong><span>请求过快或上游限流</span></div>
+                    <div><strong>500/502</strong><span>平台或上游生成失败</span></div>
+                  </div>
+                  <pre><code>{
+  "code": 402,
+  "message": "insufficient credits"
+}</code></pre>
+                </article>
+              </div>
+            </div>
           </section>
 
           <section v-if="state.activeView === 'profile'" class="panel list-panel">
