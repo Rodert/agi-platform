@@ -122,7 +122,7 @@ func (s *videoService) prepareAndCreateVideoTask(ctx context.Context, req Submit
 		return nil, fmt.Errorf("%w: video seconds must be 5, 10, or 15", ErrInvalidRequest)
 	}
 	if req.AspectRatio == "" {
-		req.AspectRatio = "9:16"
+		req.AspectRatio = "16:9"
 	}
 	videoModel, err := s.repos.Videos.FindModelByCode(ctx, req.Model)
 	if err != nil {
@@ -262,11 +262,11 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 	statusResult := &provider.VideoStatusResult{
 		TaskID:      created.TaskID,
 		Status:      normalizeVideoTaskStatus(created.Status),
-		Progress:    10,
+		Progress:    videoProviderProgress(created.Status, 10),
 		URL:         created.URL,
 		RawResponse: created.RawResponse,
 	}
-	_ = s.repos.Videos.UpdateTaskStatus(ctx, nil, task.ID, model.VideoTaskStatusRunning, 10, map[string]interface{}{
+	_ = s.repos.Videos.UpdateTaskStatus(ctx, nil, task.ID, model.VideoTaskStatusRunning, statusResult.Progress, map[string]interface{}{
 		"provider_task_id": created.TaskID,
 		"provider_response": datatypes.JSON(
 			[]byte(safeJSON(created.RawResponse)),
@@ -290,6 +290,9 @@ func (s *videoService) runVideoTask(ctx context.Context, prepared *preparedVideo
 		}
 		status = statusResult.Status
 		progress := statusResult.Progress
+		if status == model.VideoTaskStatusSucceeded && progress >= 100 {
+			progress = 95
+		}
 		if progress <= 0 {
 			progress = 20
 		}
@@ -477,7 +480,7 @@ func (s *videoService) normalizeAssetReferences(values []string, appBaseURL stri
 func (s *videoService) markVideoFailedAndRefund(ctx context.Context, task *model.VideoTask, cause error, rawResponse ...string) error {
 	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
 		now := time.Now()
-		values := map[string]interface{}{"error_message": cause.Error(), "completed_at": now}
+		values := map[string]interface{}{"error_message": publicErrorMessage(cause), "completed_at": now}
 		if raw := firstNonEmptyString(rawResponse...); raw != "" {
 			values["provider_response"] = datatypes.JSON([]byte(safeJSON(raw)))
 		}
@@ -611,6 +614,13 @@ func normalizeVideoTaskStatus(status string) string {
 	default:
 		return status
 	}
+}
+
+func videoProviderProgress(status string, fallback int) int {
+	if normalizeVideoTaskStatus(status) == model.VideoTaskStatusSucceeded {
+		return 95
+	}
+	return fallback
 }
 
 func downloadExternalVideo(ctx context.Context, endpoint string, timeoutSeconds int) ([]byte, string, error) {

@@ -547,7 +547,7 @@ func (s *imageTaskService) markFailedAndRefund(ctx context.Context, task *model.
 	return s.repos.Tx.Transaction(ctx, func(tx repository.Tx) error {
 		now := time.Now()
 		values := map[string]interface{}{
-			"error_message": cause.Error(),
+			"error_message": publicErrorMessage(cause),
 			"completed_at":  now,
 		}
 		if raw := firstNonEmptyString(rawResponse...); raw != "" {

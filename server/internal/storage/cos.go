@@ -47,7 +47,7 @@ func (s *COSStore) Put(ctx context.Context, key string, body io.Reader, size int
 		ObjectPutHeaderOptions: &cos.ObjectPutHeaderOptions{ContentType: mimeType},
 	})
 	if err != nil {
-		return Object{}, err
+		return Object{}, ErrUploadFailed
 	}
 	return Object{
 		Key:       objectKey,

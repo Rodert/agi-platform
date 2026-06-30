@@ -2,12 +2,15 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"io"
 	"mime"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+var ErrUploadFailed = errors.New("文件存储上传失败，请稍后重试")
 
 type Object struct {
 	Key       string

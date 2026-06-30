@@ -67,7 +67,7 @@ func (h *uploadHandler) Reference(c *gin.Context) {
 	mimeType := storage.MimeTypeFromFilename(file.Filename, file.Header.Get("Content-Type"))
 	stored, err := h.store.Put(c.Request.Context(), key, source, file.Size, mimeType)
 	if err != nil {
-		response.Fail(c, http.StatusInternalServerError, err.Error())
+		response.Fail(c, http.StatusInternalServerError, "文件上传失败，请稍后重试")
 		return
 	}
 

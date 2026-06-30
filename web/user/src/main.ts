@@ -122,9 +122,9 @@ const generateForm = reactive({
 
 const videoForm = reactive({
   model: "video-ds-2.0-fast",
-  prompt: "A cinematic 9:16 video of a cat running through warm sunlight",
+  prompt: "A cinematic 16:9 video of a cat running through warm sunlight",
   seconds: 15,
-  aspect_ratio: "9:16",
+  aspect_ratio: "16:9",
   images: "",
   videos: "",
   audios: ""
@@ -590,6 +590,16 @@ function taskCanRefresh(status: string) {
   return status === "pending" || status === "running";
 }
 
+function videoEmptyHint(task: VideoTask) {
+  if (!taskCanRefresh(task.status)) {
+    return "这个任务没有视频结果";
+  }
+  if (task.progress >= 95) {
+    return "视频已生成，正在保存到平台资源";
+  }
+  return "后台生成中，稍后刷新查看";
+}
+
 function modelName(modelID: number) {
   const model = state.models.find((item) => item.id === modelID);
   return model?.display_name || `#${modelID}`;
@@ -741,6 +751,7 @@ const App = {
       activeViewTitle,
       taskStatusText,
       taskCanRefresh,
+      videoEmptyHint,
       modelName,
       videoModelName,
       videoModelOptionLabel,
@@ -968,8 +979,8 @@ const App = {
                 </label>
                 <label>比例
                   <select v-model="videoForm.aspect_ratio">
-                    <option value="9:16">9:16</option>
                     <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
                     <option value="1:1">1:1</option>
                   </select>
                 </label>
@@ -1160,7 +1171,7 @@ const App = {
               <p v-if="state.selectedVideoTask.task.error_message" class="error">{{ state.selectedVideoTask.task.error_message }}</p>
               <div v-if="!state.selectedVideoTask.videos.length" class="empty-state compact-empty">
                 <Loader2 v-if="taskCanRefresh(state.selectedVideoTask.task.status)" class="spin" :size="28" />
-                <span>{{ taskCanRefresh(state.selectedVideoTask.task.status) ? '后台生成中，稍后刷新查看' : '这个任务没有视频结果' }}</span>
+                <span>{{ videoEmptyHint(state.selectedVideoTask.task) }}</span>
               </div>
               <div v-else class="video-result-list">
                 <article v-for="video in state.selectedVideoTask.videos" :key="video.id" class="video-card">
@@ -1319,9 +1330,9 @@ Content-Type: application/json</code></pre>
   -H "Content-Type: application/json" \\
   -d '{
     "model": "video-ds-2.0-fast",
-    "prompt": "A cinematic 9:16 video of a cat running through warm sunlight",
+    "prompt": "A cinematic 16:9 video of a cat running through warm sunlight",
     "seconds": 15,
-    "aspect_ratio": "9:16",
+    "aspect_ratio": "16:9",
     "images": [],
     "videos": [],
     "audios": []
