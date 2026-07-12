@@ -1,0 +1,142 @@
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: agi-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: agi_platform
+      MYSQL_USER: agi
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-agi123456}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/scripts/migrations:/docker-entrypoint-initdb.d
+    command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    networks:
+      - agi-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: agi-redis
+    restart: always
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - agi-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 后端 API 服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: agi-backend
+    restart: always
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=agi
+      - DB_PASSWORD=${MYSQL_PASSWORD:-agi123456}
+      - DB_NAME=agi_platform
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    ports:
+      - "${API_PORT:-8080}:8080"
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agi-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--output-document=/dev/null", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Worker 服务
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: agi-worker
+    restart: always
+    command: ["/app/worker"]
+    environment:
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=agi
+      - DB_PASSWORD=${MYSQL_PASSWORD:-agi123456}
+      - DB_NAME=agi_platform
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - agi-network
+
+  # 管理后台前端
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+    container_name: agi-admin
+    restart: always
+    ports:
+      - "${ADMIN_PORT:-3001}:80"
+    volumes:
+      - ./admin/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks:
+      - agi-network
+
+  # 用户端前端
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: agi-frontend
+    restart: always
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      - backend
+    networks:
+      - agi-network
+
+volumes:
+  mysql_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  agi-network:
+    driver: bridge

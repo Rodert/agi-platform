@@ -1,0 +1,8 @@
+{
+  "name": "agi-platform",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --dir apps/web dev",
+    "build:web": "pnpm --dir apps/web build"
+  }
+}

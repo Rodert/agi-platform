@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>潮汐 AI - 灵感创作平台</title>
+  <style>
+    :root{--bg:#090b12;--panel:#11141e;--panel2:#171b27;--line:#252b3a;--text:#f4f6fb;--muted:#8f97aa;--cyan:#52d9d1;--cyan2:#287b80;--pink:#f08aa8;--sidebar:76px}
+    *{box-sizing:border-box}html{color-scheme:dark}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 Inter,"PingFang SC","Microsoft YaHei",sans-serif;letter-spacing:0}button,input,textarea{font:inherit}button{color:inherit}.icon{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+    body:before{content:"";position:fixed;inset:0;pointer-events:none;background-image:radial-gradient(circle at 20% 30%,rgba(82,217,209,.11) 0 1px,transparent 1.5px),radial-gradient(circle at 85% 14%,rgba(240,138,168,.1) 0 1px,transparent 1.5px);background-size:170px 170px,230px 230px}
+    .sidebar{position:fixed;z-index:20;inset:0 auto 0 0;width:var(--sidebar);border-right:1px solid #1b1f2b;background:rgba(9,11,18,.96);display:flex;flex-direction:column;align-items:center;padding:22px 10px 18px}
+    .logo{width:40px;height:40px;border:1px solid #2e3847;border-radius:50%;display:grid;place-items:center;background:#151a26;color:var(--cyan);box-shadow:0 0 24px rgba(82,217,209,.08)}.logo svg{width:23px}
+    .nav{display:grid;gap:10px;margin-top:42px;width:100%}.nav-btn{position:relative;border:0;background:transparent;color:#727b8d;height:62px;display:grid;place-items:center;gap:2px;cursor:pointer;border-radius:6px}.nav-btn span{font-size:12px}.nav-btn:hover,.nav-btn.active{background:#141a25;color:var(--cyan)}.nav-btn.active:before{content:"";position:absolute;left:-10px;width:3px;height:26px;background:var(--cyan);border-radius:0 4px 4px 0;box-shadow:0 0 12px var(--cyan)}
+    .side-bottom{margin-top:auto;display:grid;gap:16px;color:#737c8e}.avatar{width:34px;height:34px;border:1px solid #315a61;border-radius:50%;display:grid;place-items:center;color:var(--cyan);cursor:pointer}
+    main{margin-left:var(--sidebar);min-height:100vh}.topbar{height:64px;border-bottom:1px solid #1b1f2b;display:flex;align-items:center;justify-content:space-between;padding:0 34px;position:sticky;top:0;z-index:10;background:rgba(9,11,18,.86);backdrop-filter:blur(16px)}
+    .brand{font-weight:700;font-size:16px}.brand small{color:var(--muted);font-weight:400;margin-left:10px}.top-actions{display:flex;align-items:center;gap:10px}.balance,.login{border:1px solid var(--line);background:#131722;padding:8px 12px;border-radius:6px;cursor:pointer}.balance strong{color:var(--cyan)}.login{background:var(--cyan);border-color:var(--cyan);color:#071110;font-weight:700;padding-inline:18px}
+    .wrap{width:min(1180px,calc(100% - 52px));margin:0 auto;padding:24px 0 60px}.notice{height:28px;display:flex;align-items:center;gap:8px;color:#9aa4b8;font-size:13px}.notice b{color:var(--cyan);font-weight:500}
+    .composer{margin-top:10px;border:1px solid #2a3040;background:linear-gradient(180deg,#131722,#10131c);box-shadow:0 18px 50px rgba(0,0,0,.25);border-radius:8px;overflow:hidden;transition:.2s}.composer:focus-within{border-color:#3a8586;box-shadow:0 0 0 3px rgba(82,217,209,.07)}.prompt-area{display:flex;min-height:108px;padding:16px}.upload{width:66px;height:72px;border:1px dashed #424b60;background:#171b27;border-radius:6px;color:#8a94a6;display:grid;place-items:center;cursor:pointer;flex:0 0 auto}.upload b{display:block;text-align:center;font-size:19px;font-weight:400}.upload span{font-size:11px}.prompt{border:0;outline:0;resize:none;background:transparent;color:#e9edf4;padding:5px 14px;width:100%;font-size:16px;line-height:1.7}.prompt::placeholder{color:#6f788c}.composer-tools{min-height:56px;border-top:1px solid #222735;padding:9px 13px;display:flex;align-items:center;gap:8px}.select-btn{height:36px;border:1px solid #2d3444;background:#181d29;border-radius:5px;padding:0 12px;cursor:pointer}.select-btn.primary{color:var(--cyan);border-color:#31575c}.cost{margin-left:auto;color:#8d96a8}.generate{width:40px;height:40px;border-radius:50%;border:0;background:#24313c;color:#536274;display:grid;place-items:center;cursor:not-allowed}.generate.ready{background:var(--cyan);color:#081211;cursor:pointer;box-shadow:0 0 22px rgba(82,217,209,.25)}
+    .modes{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:34px auto;width:82%}.mode{border:1px solid var(--line);background:#121620;min-height:66px;border-radius:6px;padding:12px 14px;display:flex;align-items:center;gap:12px;text-align:left;cursor:pointer}.mode:hover,.mode.active{border-color:#36767a;background:#151d27;box-shadow:inset 0 0 20px rgba(82,217,209,.04)}.mode-icon{font-size:24px}.mode strong{display:block;font-size:14px}.mode small{color:var(--muted);white-space:nowrap}
+    .discover-head{display:flex;align-items:center;gap:16px}.tabs{display:flex;background:#11151f;border:1px solid #232938;padding:3px;border-radius:6px}.tab{border:0;background:transparent;padding:7px 17px;color:#8e97aa;border-radius:4px;cursor:pointer}.tab.active{background:var(--cyan);color:#071312;font-weight:700}.search{height:38px;min-width:250px;border:1px solid #2b3242;background:#11151e;border-radius:6px;display:flex;align-items:center;padding:0 12px;gap:8px}.search input{border:0;outline:0;background:transparent;width:100%;color:var(--text)}.publish{margin-left:auto;border:1px solid #397579;background:#16252c;color:#bff7f3;border-radius:5px;height:38px;padding:0 16px;cursor:pointer}
+    .chips{display:flex;gap:8px;overflow:auto;padding:16px 0 14px;scrollbar-width:none}.chip{border:1px solid #292f3e;background:#131720;color:#949daf;border-radius:15px;padding:4px 13px;white-space:nowrap;cursor:pointer}.chip.active,.chip:hover{border-color:#438e90;color:#c7fffb;background:#18262b}
+    .gallery{columns:4 220px;column-gap:12px}.card{position:relative;margin:0 0 12px;break-inside:avoid;border-radius:5px;overflow:hidden;background:#171b25;min-height:180px;cursor:pointer}.card img{width:100%;display:block;transition:.45s;min-height:180px;object-fit:cover}.card:hover img{transform:scale(1.025);filter:brightness(.72)}.card-info{position:absolute;inset:auto 0 0;padding:38px 12px 10px;background:linear-gradient(transparent,rgba(5,7,11,.88));opacity:0;transform:translateY(8px);transition:.25s}.card:hover .card-info{opacity:1;transform:none}.card-info strong{display:block;font-size:13px}.card-meta{display:flex;justify-content:space-between;color:#b3bac9;font-size:11px;margin-top:5px}.tag{position:absolute;top:9px;left:9px;background:rgba(8,10,15,.7);backdrop-filter:blur(5px);padding:3px 7px;border-radius:3px;font-size:10px;color:#dce1ea}
+    .toast{position:fixed;right:24px;bottom:24px;background:#1b2730;border:1px solid #3e7779;color:#d8fffc;padding:12px 18px;border-radius:6px;z-index:30;transform:translateY(20px);opacity:0;pointer-events:none;transition:.25s}.toast.show{transform:none;opacity:1}
+    @media(max-width:780px){:root{--sidebar:0px}.sidebar{inset:auto 0 0;width:100%;height:64px;flex-direction:row;padding:4px 18px;border-right:0;border-top:1px solid #222735}.logo,.side-bottom{display:none}.nav{display:flex;margin:0;justify-content:space-between}.nav-btn{height:54px;width:64px}.nav-btn.active:before{left:50%;top:-4px;width:24px;height:3px;transform:translateX(-50%)}main{margin:0;padding-bottom:68px}.topbar{padding:0 16px}.brand small,.balance{display:none}.wrap{width:calc(100% - 26px);padding-top:14px}.notice{overflow:hidden;white-space:nowrap}.prompt-area{min-height:118px}.composer-tools{overflow:auto}.select-btn{white-space:nowrap}.cost{display:none}.modes{width:100%;grid-template-columns:1fr 1fr;margin:22px 0}.mode{min-height:62px}.discover-head{flex-wrap:wrap;gap:10px}.search{min-width:0;flex:1}.publish{margin-left:0}.gallery{columns:2 140px;column-gap:8px}.card{margin-bottom:8px}.card-info{opacity:1;transform:none}.top-actions{gap:6px}}
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo" title="潮汐 AI"><svg class="icon" viewBox="0 0 24 24"><path d="M3 15c3-5 6-5 9 0s6 5 9 0"/><path d="M3 10c3-5 6-5 9 0s6 5 9 0"/></svg></div>
+    <nav class="nav">
+      <button class="nav-btn active"><svg class="icon" viewBox="0 0 24 24"><path d="m12 3 2.5 5.2L20 9l-4 4 .9 5.6L12 16l-4.9 2.6L8 13 4 9l5.5-.8Z"/></svg><span>灵感</span></button>
+      <button class="nav-btn"><svg class="icon" viewBox="0 0 24 24"><path d="M4 6h16v12H4z"/><path d="m7 15 3-3 2 2 2-2 3 3"/></svg><span>生成</span></button>
+      <button class="nav-btn"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v11H3z"/></svg><span>资产</span></button>
+      <button class="nav-btn"><svg class="icon" viewBox="0 0 24 24"><path d="m14 6 4 4M5 19l7-7M15 3a5 5 0 0 0 6 6L9 21H3v-6Z"/></svg><span>工具</span></button>
+    </nav>
+    <div class="side-bottom"><svg class="icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><div class="avatar">⌁</div></div>
+  </aside>
+  <main>
+    <header class="topbar"><div class="brand">潮汐 AI <small>让灵感即刻成像</small></div><div class="top-actions"><button class="balance">✦ <strong>120</strong> 灵感值</button><button class="login">登录</button></div></header>
+    <div class="wrap">
+      <div class="notice">◉ <b>新品上线</b> Flux Vision 2 模型现已开放体验，细节与文字表现全面提升</div>
+      <section class="composer">
+        <div class="prompt-area"><button class="upload"><b>＋</b><span>参考图</span></button><textarea class="prompt" placeholder="描述你想要的画面，AI 将为你生成精美图片..."></textarea></div>
+        <div class="composer-tools"><button class="select-btn primary">✦ 图片生成⌄</button><button class="select-btn">Flux Vision 2⌄</button><button class="select-btn">□ 1:1 · 1K⌄</button><span class="cost">✦ 4</span><button class="generate" aria-label="开始生成">↑</button></div>
+      </section>
+      <section class="modes"><button class="mode active"><span class="mode-icon">🎨</span><span><strong>图片生成</strong><small>智能美学提升</small></span></button><button class="mode"><span class="mode-icon">🎬</span><span><strong>视频生成</strong><small>首尾帧精准控制</small></span></button><button class="mode"><span class="mode-icon">🛍️</span><span><strong>商品组图</strong><small>电商场景专属</small></span></button><button class="mode"><span class="mode-icon">🧰</span><span><strong>工具箱</strong><small>实用创作助手</small></span></button></section>
+      <section class="discover">
+        <div class="discover-head"><div class="tabs"><button class="tab active">全部</button><button class="tab">图片</button><button class="tab">视频</button></div><label class="search"><svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg><input placeholder="搜索标题或提示词..."></label><button class="publish">＋ 发布作品</button></div>
+        <div class="chips"><button class="chip active">全部</button><button class="chip">灵感</button><button class="chip">人像</button><button class="chip">创意</button><button class="chip">写真</button><button class="chip">电影</button><button class="chip">视觉</button><button class="chip">时尚</button><button class="chip">3D</button><button class="chip">产品</button><button class="chip">极简</button><button class="chip">插画</button><button class="chip">建筑</button></div>
+        <div class="gallery" id="gallery"></div>
+      </section>
+    </div>
+  </main>
+  <div class="toast" id="toast">已切换创作模式</div>
+  <script>
+    const works=[
+      ['assets/work-01.jpg','纸上奇境','插画','384'],
+      ['assets/work-02.jpg','梦境宇宙','视觉','728'],
+      ['assets/work-03.jpg','山海之间','电影','516'],
+      ['assets/work-04.jpg','窗边时刻','写真','942'],
+      ['assets/work-05.jpg','浮空竞速','产品','336'],
+      ['assets/work-06.jpg','森林漫游','灵感','603'],
+      ['assets/work-07.jpg','霓虹城市','3D','271'],
+      ['assets/work-08.jpg','复古胶片','人像','805'],
+      ['assets/work-09.jpg','静谧建筑','建筑','412'],
+      ['assets/work-10.jpg','风的颜色','极简','197'],
+      ['assets/work-11.jpg','未来结构','创意','634'],
+      ['assets/work-12.jpg','日光肖像','时尚','889']
+    ];
+    const gallery=document.querySelector('#gallery');
+    gallery.innerHTML=works.map(w=>`<article class="card"><img src="${w[0]}" alt="${w[1]}" loading="lazy"><span class="tag">${w[2]}</span><div class="card-info"><strong>${w[1]}</strong><div class="card-meta"><span>@潮汐创作者</span><span>♡ ${w[3]}</span></div></div></article>`).join('');
+    const toast=document.querySelector('#toast'); const flash=t=>{toast.textContent=t;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1300)};
+    document.querySelectorAll('.nav-btn').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');flash(`${b.innerText.trim()}模块演示`)});
+    document.querySelectorAll('.mode').forEach(b=>b.onclick=()=>{document.querySelectorAll('.mode').forEach(x=>x.classList.remove('active'));b.classList.add('active');flash(`已切换：${b.querySelector('strong').innerText}`)});
+    document.querySelectorAll('.chip').forEach(b=>b.onclick=()=>{document.querySelectorAll('.chip').forEach(x=>x.classList.remove('active'));b.classList.add('active')});
+    document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active')});
+    const prompt=document.querySelector('.prompt'),generate=document.querySelector('.generate');prompt.oninput=()=>generate.classList.toggle('ready',prompt.value.trim().length>0);generate.onclick=()=>{if(generate.classList.contains('ready'))flash('创作任务已提交')};
+    document.querySelector('.upload').onclick=()=>flash('参考图上传功能');document.querySelector('.publish').onclick=()=>flash('请先登录后发布作品');document.querySelector('.login').onclick=()=>flash('登录功能演示');
+  </script>
+</body>
+</html>
