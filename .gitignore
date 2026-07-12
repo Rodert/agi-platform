@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.*
+
+# Build outputs and caches
+dist/
+build/
+coverage/
+.vite/
+.turbo/
+.next/
+.nuxt/
+.output/
+.vercel/
+*.tsbuildinfo
+backend/bin/
+backend/tmp/
+tmp/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Runtime data
+uploads/
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# Go artifacts
+*.test
+*.out
+
+# IDE and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local scratch files
+/=
+/exporting
+/naming
+/writing
