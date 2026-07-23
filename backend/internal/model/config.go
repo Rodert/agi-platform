@@ -8,38 +8,56 @@ import (
 
 // AIModel AI模型配置
 type AIModel struct {
-	ID           int64          `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name         string         `gorm:"size:100;not null" json:"name"`
-	DisplayName  string         `gorm:"size:100;not null" json:"display_name"`
-	Type         string         `gorm:"size:20;not null;index" json:"type"` // image/video
-	Provider     string         `gorm:"size:50;not null" json:"provider"`
-	ProviderAccountID *int64    `gorm:"index" json:"provider_account_id"`
-	ProviderAccount   *AIProviderAccount `gorm:"foreignKey:ProviderAccountID" json:"provider_account,omitempty"`
-	Description  string         `gorm:"size:500" json:"description"`
-	LogoURL      string         `gorm:"size:255" json:"logo_url"`
-	Tag          string         `gorm:"size:50" json:"tag"`
-	Cost         int            `gorm:"not null" json:"cost"`
-	APIConfig    datatypes.JSON `gorm:"type:json;not null" json:"api_config"`
-	ParamsConfig datatypes.JSON `gorm:"type:json" json:"params_config"`
-	IsActive     bool           `gorm:"default:true;index" json:"is_active"`
-	SortOrder    int            `gorm:"default:0" json:"sort_order"`
-	CreatedAt    time.Time      `gorm:"not null" json:"created_at"`
-	UpdatedAt    time.Time      `gorm:"not null" json:"updated_at"`
+	ID          int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name        string `gorm:"size:100;uniqueIndex;not null" json:"name"`
+	DisplayName string `gorm:"size:100;not null" json:"display_name"`
+	Type        string `gorm:"size:20;not null;index" json:"type"` // image/video
+	// Provider is retained for historical rows only. Routing is defined by ChannelModels.
+	Provider      string         `gorm:"size:50;not null" json:"provider"`
+	Description   string         `gorm:"size:500" json:"description"`
+	LogoURL       string         `gorm:"size:255" json:"logo_url"`
+	Tag           string         `gorm:"size:50" json:"tag"`
+	Cost          int            `gorm:"not null" json:"cost"`
+	APIConfig     datatypes.JSON `gorm:"type:json;not null" json:"api_config"`
+	ParamsConfig  datatypes.JSON `gorm:"type:json" json:"params_config"`
+	IsActive      bool           `gorm:"default:true;index" json:"is_active"`
+	SortOrder     int            `gorm:"default:0" json:"sort_order"`
+	CreatedAt     time.Time      `gorm:"not null" json:"created_at"`
+	UpdatedAt     time.Time      `gorm:"not null" json:"updated_at"`
+	ChannelModels []ChannelModel `gorm:"foreignKey:ModelID" json:"channel_models,omitempty"`
 }
 
 type AIProviderAccount struct {
-	ID          int64          `gorm:"primaryKey;autoIncrement" json:"id"`
-	Name        string         `gorm:"size:100;not null" json:"name"`
-	Provider    string         `gorm:"size:50;not null;index" json:"provider"`
-	APIURL      string         `gorm:"size:500;not null" json:"api_url"`
-	APIKey      string         `gorm:"size:500;not null" json:"api_key"`
-	ExtraConfig datatypes.JSON `gorm:"type:json" json:"extra_config"`
-	IsActive    bool           `gorm:"default:true;index" json:"is_active"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID            int64          `gorm:"primaryKey;autoIncrement" json:"id"`
+	Name          string         `gorm:"size:100;not null" json:"name"`
+	Provider      string         `gorm:"size:50;not null;index" json:"provider"`
+	APIURL        string         `gorm:"size:500;not null" json:"api_url"`
+	APIKey        string         `gorm:"size:500;not null" json:"api_key"`
+	ExtraConfig   datatypes.JSON `gorm:"type:json" json:"extra_config"`
+	IsActive      bool           `gorm:"default:true;index" json:"is_active"`
+	Priority      int            `gorm:"default:100;index" json:"priority"`
+	HealthStatus  string         `gorm:"size:20;default:unknown" json:"health_status"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	ChannelModels []ChannelModel `gorm:"foreignKey:ChannelID" json:"channel_models,omitempty"`
 }
 
 func (AIProviderAccount) TableName() string { return "ai_provider_accounts" }
+
+// ChannelModel only describes whether a channel account can call a global model.
+// Model capabilities live exclusively on AIModel, so every channel uses the same schema.
+type ChannelModel struct {
+	ID        int64              `gorm:"primaryKey;autoIncrement" json:"id"`
+	ChannelID int64              `gorm:"not null;uniqueIndex:idx_channel_model" json:"channel_id"`
+	ModelID   int64              `gorm:"not null;uniqueIndex:idx_channel_model;index" json:"model_id"`
+	IsActive  bool               `gorm:"default:true;index" json:"is_active"`
+	CreatedAt time.Time          `json:"created_at"`
+	UpdatedAt time.Time          `json:"updated_at"`
+	Channel   *AIProviderAccount `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
+	Model     *AIModel           `gorm:"foreignKey:ModelID" json:"model,omitempty"`
+}
+
+func (ChannelModel) TableName() string { return "channel_models" }
 
 func (AIModel) TableName() string {
 	return "ai_models"
@@ -58,6 +76,21 @@ type SystemConfig struct {
 
 func (SystemConfig) TableName() string {
 	return "system_configs"
+}
+
+// TaskConfig contains execution policy shared by all image and video tasks.
+// It is intentionally a dedicated singleton instead of generic key/value data,
+// so task processing can evolve without coupling to unrelated system settings.
+type TaskConfig struct {
+	ID               int64     `gorm:"primaryKey;default:1" json:"id"`
+	MaxActiveTasks   int       `gorm:"not null;default:50" json:"max_active_tasks"`
+	PromptMaxLength  int       `gorm:"not null;default:5000" json:"prompt_max_length"`
+	MaxRetryAttempts int       `gorm:"not null;default:0" json:"max_retry_attempts"`
+	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (TaskConfig) TableName() string {
+	return "task_configs"
 }
 
 // Category 分类配置

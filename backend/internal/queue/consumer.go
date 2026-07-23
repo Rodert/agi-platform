@@ -109,28 +109,55 @@ func (c *Consumer) handleMessage(ctx context.Context, msg redis.XMessage) {
 		return
 	}
 
-	var taskMsg worker.TaskMessage
-	if err := json.Unmarshal([]byte(dataStr), &taskMsg); err != nil {
+	var queueTask TaskMessage
+	if err := json.Unmarshal([]byte(dataStr), &queueTask); err != nil {
 		logger.Error("解析任务失败", zap.Error(err))
 		c.ackMessage(ctx, msg.ID)
 		return
 	}
 
-	logger.Info(fmt.Sprintf("⚙️  开始处理任务: TaskID=%d, Type=%s", taskMsg.TaskID, taskMsg.Type))
+	taskMsg := &worker.TaskMessage{TaskID: queueTask.TaskID, UserID: queueTask.UserID, Type: queueTask.Type, Prompt: queueTask.Prompt, ModelName: queueTask.ModelName, Params: queueTask.Params}
+	logger.Info(fmt.Sprintf("⚙️  开始处理任务: TaskID=%d, Type=%s, Attempt=%d", taskMsg.TaskID, taskMsg.Type, queueTask.Attempt))
 
 	// 调用处理器
-	if err := c.processor.Process(ctx, &taskMsg); err != nil {
+	if err := c.processor.Process(ctx, taskMsg); err != nil {
 		logger.Error("处理任务失败",
 			zap.Int64("task_id", taskMsg.TaskID),
 			zap.Error(err),
 		)
-		// TODO: 重试机制
+		if c.retryTask(ctx, &queueTask) {
+			if processor, ok := c.processor.(worker.RetryProcessor); ok {
+				if markErr := processor.MarkRetrying(queueTask.TaskID); markErr != nil {
+					logger.Error("记录重试状态失败", zap.Int64("task_id", queueTask.TaskID), zap.Error(markErr))
+				}
+			}
+			logger.Info(fmt.Sprintf("🔁 任务已重新入队: TaskID=%d, Attempt=%d", queueTask.TaskID, queueTask.Attempt))
+		}
 	} else {
 		logger.Info(fmt.Sprintf("✅ 任务处理完成: TaskID=%d", taskMsg.TaskID))
 	}
 
 	// 确认消息
 	c.ackMessage(ctx, msg.ID)
+}
+
+// retryTask uses the task's creation-time retry budget. A retry count of zero
+// deliberately preserves a single execution.
+func (c *Consumer) retryTask(ctx context.Context, task *TaskMessage) bool {
+	if task.Attempt >= task.MaxRetryAttempts {
+		return false
+	}
+	task.Attempt++
+	data, err := json.Marshal(task)
+	if err != nil {
+		logger.Error("序列化重试任务失败", zap.Error(err))
+		return false
+	}
+	if err := c.redis.XAdd(ctx, &redis.XAddArgs{Stream: c.streamName, Values: map[string]interface{}{"task_id": task.TaskID, "user_id": task.UserID, "type": task.Type, "data": string(data), "created_at": time.Now().Unix()}}).Err(); err != nil {
+		logger.Error("重新投递任务失败", zap.Int64("task_id", task.TaskID), zap.Error(err))
+		return false
+	}
+	return true
 }
 
 // ackMessage 确认消息

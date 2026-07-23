@@ -18,12 +18,15 @@ INSERT INTO `system_configs` (`key`, `value`, `type`, `category`, `description`)
 ('invite_recharge_reward_inviter', '100', 'int', 'invitation', '邀请人首充奖励'),
 ('invite_recharge_enabled', 'true', 'bool', 'invitation', '是否启用首充奖励'),
 
--- 任务配置
-('max_concurrent_tasks', '3', 'int', 'task', '最大并发任务数'),
-('task_timeout_minutes', '30', 'int', 'task', '任务超时时间(分钟)'),
-
 -- 审核配置
 ('audit_keywords', '["暴力", "色情", "政治"]', 'json', 'audit', '审核敏感词');
+
+-- ----------------------------
+-- 1.1 任务配置
+-- ----------------------------
+INSERT INTO `task_configs` (`id`, `max_active_tasks`, `prompt_max_length`, `max_retry_attempts`) VALUES
+(1, 50, 5000, 0)
+ON DUPLICATE KEY UPDATE `id` = `id`;
 
 -- ----------------------------
 -- 2. 充值套餐
@@ -38,18 +41,18 @@ INSERT INTO `credit_packages` (`name`, `price`, `points`, `note`, `is_hot`, `sor
 -- ----------------------------
 INSERT INTO `ai_models` (`name`, `display_name`, `type`, `provider`, `description`, `logo_url`, `tag`, `cost`, `api_config`, `params_config`, `is_active`, `sort_order`) VALUES
 -- 图片模型
-('GPT Image2', 'GPT 图像 2 代', 'image', 'openai', '新一代图像模型，中文支持优秀', '/logos/gpt.png', '推荐', 4,
+('gpt-image-2', 'GPT Image 2', 'image', 'openai', '新一代图像模型，中文支持优秀', '/logos/gpt.png', '推荐', 4,
  '{"api_url":"https://api.openai.com/v1/images/generations","model":"dall-e-3","timeout":120}',
  '{"ratio":{"label":"画面比例","type":"select","options":[{"value":"1:1","label":"1:1 方形"},{"value":"16:9","label":"16:9 横版"},{"value":"9:16","label":"9:16 竖版"}],"default":"1:1"},"resolution":{"label":"分辨率","type":"select","options":[{"value":"1K","label":"1K"},{"value":"2K","label":"2K","extra_cost":2}],"default":"1K"}}',
  1, 1),
 
-('Seedream', '即梦', 'image', 'jimeng', '中文友好的图像生成模型', '/logos/jm.png', '中文友好', 4,
+('seedream-4.0', 'Seedream 4.0', 'image', 'jimeng', '中文友好的图像生成模型', '/logos/jm.png', '中文友好', 4,
  '{"api_url":"https://api.jimeng.ai/v1/generate","timeout":60}',
  '{"ratio":{"label":"画面比例","type":"select","options":[{"value":"1:1","label":"1:1"},{"value":"16:9","label":"16:9"}],"default":"1:1"}}',
  1, 2),
 
 -- 视频模型
-('Wave 1.5', 'Wave 1.5', 'video', 'wave', '最新一代视频生成模型', NULL, '新品上线', 18,
+('wave-1.5', 'Wave 1.5', 'video', 'wave', '最新一代视频生成模型', NULL, '新品上线', 18,
  '{"api_url":"https://api.wave.ai/v1/video/generate","timeout":300}',
  '{"ratio":{"label":"画面比例","type":"select","options":[{"value":"16:9","label":"16:9"},{"value":"9:16","label":"9:16"}],"default":"16:9"},"resolution":{"label":"清晰度","type":"select","options":[{"value":"720P","label":"720P"},{"value":"1080P","label":"1080P","extra_cost":6}],"default":"720P"},"duration":{"label":"时长","type":"select","options":[{"value":"5s","label":"5秒"},{"value":"10s","label":"10秒","extra_cost":12}],"default":"5s"},"sound":{"label":"生成声音","type":"switch","default":false}}',
  1, 1);

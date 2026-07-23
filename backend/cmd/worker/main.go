@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/javapub/agi-platform-backend/internal/objectstorage"
 	"github.com/javapub/agi-platform-backend/internal/queue"
 	"github.com/javapub/agi-platform-backend/internal/repository"
 	"github.com/javapub/agi-platform-backend/internal/worker"
@@ -46,9 +47,14 @@ func main() {
 	// 创建 Repository
 	taskRepo := repository.NewTaskRepository(database.DB)
 	aiModelRepo := repository.NewAIModelRepository(database.DB)
+	channelModelRepo := repository.NewChannelModelRepository(database.DB)
+	storageConfigRepo := repository.NewStorageConfigRepository(database.DB)
+	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)
+	mediaAssetRepo := repository.NewMediaAssetRepository(database.DB)
+	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
 
 	// 创建 Processor
-	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo)
+	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo, channelModelRepo, mediaAssetRepo, objectStorageManager)
 
 	// 创建 Consumer
 	consumer := queue.NewConsumer(

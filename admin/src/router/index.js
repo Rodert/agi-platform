@@ -33,6 +33,12 @@ const routes = [
         meta: { title: '作品审核', icon: 'Picture' }
       },
       {
+        path: 'tasks',
+        name: 'Tasks',
+        component: () => import('@/views/Tasks.vue'),
+        meta: { title: '生成记录', icon: 'List' }
+      },
+      {
         path: 'reports',
         name: 'Reports',
         component: () => import('@/views/Reports.vue'),

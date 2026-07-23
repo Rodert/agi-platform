@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/javapub/agi-platform-backend/internal/model"
+import "time"
 
 // AdminLoginRequest 管理员登录请求
 type AdminLoginRequest struct {
@@ -10,7 +10,7 @@ type AdminLoginRequest struct {
 
 // AdminLoginResponse 管理员登录响应
 type AdminLoginResponse struct {
-	Token string    `json:"token"`
+	Token string     `json:"token"`
 	Admin *AdminInfo `json:"admin"`
 }
 
@@ -37,21 +37,65 @@ type AdminUserListRequest struct {
 
 // AdminTaskListRequest 任务列表请求
 type AdminTaskListRequest struct {
+	Keyword  string `form:"keyword"`
 	Status   string `form:"status"`
 	Type     string `form:"type"`
 	Page     int    `form:"page" binding:"omitempty,min=1"`
 	PageSize int    `form:"page_size" binding:"omitempty,min=1,max=100"`
 }
 
+type AdminTaskResponse struct {
+	ID               int64                      `json:"id"`
+	UserID           int64                      `json:"user_id"`
+	UserName         string                     `json:"user_name"`
+	UserEmail        string                     `json:"user_email"`
+	ChannelName      string                     `json:"channel_name"`
+	ModelName        string                     `json:"model_name"`
+	Type             string                     `json:"type"`
+	Status           string                     `json:"status"`
+	Progress         int                        `json:"progress"`
+	Prompt           string                     `json:"prompt"`
+	Params           map[string]interface{}     `json:"params"`
+	Cost             int                        `json:"cost"`
+	ResultURL        string                     `json:"result_url"`
+	ThumbnailURL     string                     `json:"thumbnail_url"`
+	ErrorMsg         string                     `json:"error_msg"`
+	AttemptCount     int                        `json:"attempt_count"`
+	MaxRetryAttempts int                        `json:"max_retry_attempts"`
+	LastRetryAt      string                     `json:"last_retry_at"`
+	Attempts         []AdminTaskAttemptResponse `json:"attempts"`
+	Assets           []AdminMediaAssetResponse  `json:"assets"`
+	CreatedAt        string                     `json:"created_at"`
+	CompletedAt      string                     `json:"completed_at"`
+}
+
+type AdminMediaAssetResponse struct {
+	ResourceType    string `json:"resource_type"`
+	StorageConfigID int64  `json:"storage_config_id"`
+	ObjectKey       string `json:"object_key"`
+	PublicURL       string `json:"public_url"`
+	ContentType     string `json:"content_type"`
+	SizeBytes       int64  `json:"size_bytes"`
+	ExpiresAt       string `json:"expires_at"`
+}
+
+type AdminTaskAttemptResponse struct {
+	Attempt     int    `json:"attempt"`
+	Status      string `json:"status"`
+	ErrorMsg    string `json:"error_msg"`
+	StartedAt   string `json:"started_at"`
+	CompletedAt string `json:"completed_at"`
+}
+
 // AdminStatsResponse 统计响应
 type AdminStatsResponse struct {
-	TotalUsers      int64 `json:"total_users"`
-	TotalTasks      int64 `json:"total_tasks"`
-	TotalWorks      int64 `json:"total_works"`
-	PendingWorks    int64 `json:"pending_works"`
-	TodayUsers      int64 `json:"today_users"`
-	TodayTasks      int64 `json:"today_tasks"`
-	TodayWorks      int64 `json:"today_works"`
+	TotalUsers   int64 `json:"total_users"`
+	TotalTasks   int64 `json:"total_tasks"`
+	TotalWorks   int64 `json:"total_works"`
+	PendingWorks int64 `json:"pending_works"`
+	TodayUsers   int64 `json:"today_users"`
+	TodayTasks   int64 `json:"today_tasks"`
+	TodayWorks   int64 `json:"today_works"`
 }
 
 type UserListRequest struct {
@@ -63,8 +107,17 @@ type UserListRequest struct {
 }
 
 type UserListResponse struct {
-	List  []*model.User `json:"list"`
-	Total int64         `json:"total"`
+	List  []*AdminUserResponse `json:"list"`
+	Total int64                `json:"total"`
+}
+
+type AdminUserResponse struct {
+	ID        int64     `json:"id"`
+	Email     string    `json:"email"`
+	Name      string    `json:"name"`
+	Level     string    `json:"level"`
+	Balance   int       `json:"balance"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 type CreateUserRequest struct {
@@ -82,4 +135,14 @@ type AdminUpdateUserRequest struct {
 
 type UpdateUserStatusRequest struct {
 	IsActive bool `json:"is_active"`
+}
+
+type AdminRechargeCreditRequest struct {
+	Type   string `json:"type" binding:"required,oneof=add deduct"`
+	Amount int    `json:"amount" binding:"required,min=1,max=1000000"`
+	Remark string `json:"remark" binding:"required,min=1,max=200"`
+}
+
+type AdminRechargeCreditResponse struct {
+	Balance int `json:"balance"`
 }

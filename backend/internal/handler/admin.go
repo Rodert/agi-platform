@@ -125,6 +125,14 @@ func (h *AdminHandler) GetUserList(c *gin.Context) {
 	response.Success(c, result)
 }
 
+func (h *AdminHandler) GetTaskList(c *gin.Context) {
+	var req dto.AdminTaskListRequest
+	if err := c.ShouldBindQuery(&req); err != nil { response.Error(c, errors.NewWithDetails(errors.ErrCodeBadRequest, "参数错误", err.Error())); return }
+	tasks, total, err := h.adminService.GetTaskList(&req)
+	if err != nil { response.Error(c, err); return }
+	response.Page(c, tasks, total, req.Page, req.PageSize)
+}
+
 // CreateUser 创建用户
 func (h *AdminHandler) CreateUser(c *gin.Context) {
 	var req dto.CreateUserRequest
@@ -149,6 +157,18 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil { response.Error(c, errors.NewWithDetails(errors.ErrCodeBadRequest, "参数错误", err.Error())); return }
 	if err := h.adminService.UpdateUser(id, &req); err != nil { response.Error(c, err); return }
 	response.Success(c, nil)
+}
+
+func (h *AdminHandler) RechargeUserCredit(c *gin.Context) {
+	userID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil { response.Error(c, errors.New(errors.ErrCodeBadRequest, "无效的用户ID")); return }
+	adminID, exists := c.Get("admin_id")
+	if !exists { response.Error(c, errors.ErrUnauthorized); return }
+	var req dto.AdminRechargeCreditRequest
+	if err := c.ShouldBindJSON(&req); err != nil { response.Error(c, errors.NewWithDetails(errors.ErrCodeBadRequest, "参数错误", err.Error())); return }
+	result, err := h.adminService.RechargeUserCredit(adminID.(int64), userID, &req)
+	if err != nil { response.Error(c, err); return }
+	response.Success(c, result)
 }
 
 // UpdateUserStatus 更新用户状态

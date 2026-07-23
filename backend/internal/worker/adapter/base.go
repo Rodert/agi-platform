@@ -6,6 +6,8 @@ import (
 
 // GenerateRequest 生成请求
 type GenerateRequest struct {
+	ModelName string                 `json:"model_name"`
+	Type      string                 `json:"type"`
 	Prompt string                 `json:"prompt"`
 	Params map[string]interface{} `json:"params"`
 }
@@ -21,4 +23,14 @@ type GenerateResponse struct {
 // Adapter AI 模型适配器接口
 type Adapter interface {
 	Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error)
+}
+
+type Factory func(config map[string]interface{}) (Adapter, error)
+
+// DiscoveredModel is the normalized result returned by a channel adapter.
+// Capability schemas are intentionally not stored here; they are owned by the
+// global model catalog and shared by every channel that supports the model.
+type DiscoveredModel struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
 }

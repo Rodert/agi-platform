@@ -40,10 +40,10 @@ func (r *StorageConfigRepository) Update(config *model.StorageConfig) error {
 	return r.db.Save(config).Error
 }
 
-// EnableConfig 启用指定配置（同时禁用其他配置）
+// EnableConfig globally selects one storage configuration in a transaction.
 func (r *StorageConfigRepository) EnableConfig(id int64) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		// 禁用所有配置
+		// Only one storage backend may receive generated and uploaded files.
 		if err := tx.Model(&model.StorageConfig{}).Where("is_enabled = ?", true).
 			Update("is_enabled", false).Error; err != nil {
 			return err

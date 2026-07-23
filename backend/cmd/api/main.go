@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/javapub/agi-platform-backend/internal/handler"
 	"github.com/javapub/agi-platform-backend/internal/middleware"
+	"github.com/javapub/agi-platform-backend/internal/objectstorage"
 	"github.com/javapub/agi-platform-backend/internal/queue"
 	"github.com/javapub/agi-platform-backend/internal/repository"
 	"github.com/javapub/agi-platform-backend/internal/service"
@@ -115,6 +116,7 @@ func setupRouter(cfg *config.Config) *gin.Engine {
 			"time":    time.Now().Unix(),
 		})
 	})
+	router.Static("/uploads", "./uploads")
 
 	// 初始化依赖并注册路由
 	initHandlers(cfg, router)
@@ -132,11 +134,14 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	requestRepo := repository.NewGenerationRequestRepository(database.DB)
 	aiModelRepo := repository.NewAIModelRepository(database.DB)
 	providerAccountRepo := repository.NewAIProviderAccountRepository(database.DB)
+	channelModelRepo := repository.NewChannelModelRepository(database.DB)
 	creditRepo := repository.NewCreditRepository(database.DB)
 
 	adminRepo := repository.NewAdminRepository(database.DB)
 	workRepo := repository.NewWorkRepository(database.DB)
 	storageConfigRepo := repository.NewStorageConfigRepository(database.DB)
+	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)
+	mediaAssetRepo := repository.NewMediaAssetRepository(database.DB)
 
 	// Queue
 	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
@@ -145,13 +150,16 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	creditService := service.NewCreditService(database.DB)
 	inviteService := service.NewInvitationService(database.DB)
 	emailService := service.NewEmailService(configRepo)
-	storageService := service.NewStorageService()
+	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
+	storageService := service.NewStorageService(objectStorageManager)
 	authService := service.NewAuthService(userRepo, codeRepo, configRepo, creditService, inviteService, emailService, &cfg.JWT, database.DB)
 	userService := service.NewUserService(userRepo, creditRepo)
-	creationService := service.NewCreationService(taskRepo, requestRepo, aiModelRepo, creditRepo, configRepo, storageService, queueProducer, database.DB)
-	adminService := service.NewAdminService(adminRepo, workRepo, userRepo, &cfg.JWT)
+	creationService := service.NewCreationService(taskRepo, requestRepo, aiModelRepo, channelModelRepo, creditRepo, mediaAssetRepo, configRepo, storageService, queueProducer, database.DB)
+	adminService := service.NewAdminService(adminRepo, workRepo, taskRepo, userRepo, creditRepo, mediaAssetRepo, objectStorageManager, &cfg.JWT, database.DB)
 	workService := service.NewWorkService(workRepo, taskRepo, userRepo)
 	storageConfigService := service.NewStorageConfigService(storageConfigRepo)
+	resourcePolicyService := service.NewResourcePolicyService(resourcePolicyRepo)
+	channelCatalogService := service.NewChannelCatalogService(providerAccountRepo, aiModelRepo, channelModelRepo)
 
 	// Handler
 	authHandler := handler.NewAuthHandler(authService)
@@ -159,7 +167,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	creationHandler := handler.NewCreationHandler(creationService)
 	adminHandler := handler.NewAdminHandler(adminService)
 	workHandler := handler.NewWorkHandler(workService)
-	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, storageConfigService, emailService)
+	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, channelModelRepo, channelCatalogService, storageConfigService, resourcePolicyService, emailService)
 
 	// 注册路由
 	registerRoutes(router, cfg, authHandler, userHandler, creationHandler, adminHandler, workHandler, adminConfigHandler)
@@ -213,8 +221,8 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		// 作品接口
 		works := apiV1.Group("/works")
 		{
-			works.GET("", workHandler.GetWorkList)                   // 获取作品列表（公开）
-			works.GET("/:id", workHandler.GetWork)                   // 获取作品详情（公开）
+			works.GET("", workHandler.GetWorkList) // 获取作品列表（公开）
+			works.GET("/:id", workHandler.GetWork) // 获取作品详情（公开）
 
 			// 需要登录的接口
 			worksAuth := works.Group("")
@@ -230,8 +238,8 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 				// 收藏（同时支持 collect 和 favorite 两个路径，保持兼容）
 				worksAuth.POST("/:id/collect", workHandler.CollectWork)
 				worksAuth.DELETE("/:id/collect", workHandler.UncollectWork)
-				worksAuth.POST("/:id/favorite", workHandler.CollectWork)      // 前端兼容
-				worksAuth.DELETE("/:id/favorite", workHandler.UncollectWork)  // 前端兼容
+				worksAuth.POST("/:id/favorite", workHandler.CollectWork)     // 前端兼容
+				worksAuth.DELETE("/:id/favorite", workHandler.UncollectWork) // 前端兼容
 			}
 		}
 
@@ -263,6 +271,8 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 				config.GET("/email", adminConfigHandler.GetEmail)
 				config.PUT("/email", adminConfigHandler.SaveEmail)
 				config.POST("/email/test", adminConfigHandler.TestEmail)
+				config.GET("/task", adminConfigHandler.GetTaskConfig)
+				config.PUT("/task", adminConfigHandler.SaveTaskConfig)
 				config.GET("/models", adminConfigHandler.GetModels)
 				config.PUT("/models/:id", adminConfigHandler.UpdateModel)
 				config.PUT("/models/:id/status", adminConfigHandler.UpdateModelStatus)
@@ -271,6 +281,8 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 				config.PUT("/storage/:id", adminConfigHandler.UpdateStorage)
 				config.POST("/storage/:id/enable", adminConfigHandler.EnableStorage)
 				config.DELETE("/storage/:id", adminConfigHandler.DeleteStorage)
+				config.GET("/storage/policies", adminConfigHandler.GetResourcePolicies)
+				config.PUT("/storage/policies/:type", adminConfigHandler.UpdateResourcePolicy)
 			}
 			accounts := adminV1.Group("/provider-accounts")
 			{
@@ -279,14 +291,29 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 				accounts.PUT("/:id", adminConfigHandler.UpdateProviderAccount)
 				accounts.DELETE("/:id", adminConfigHandler.DeleteProviderAccount)
 			}
+			channels := adminV1.Group("/channels")
+			{
+				channels.GET("", adminConfigHandler.ListChannels)
+				channels.POST("", adminConfigHandler.CreateChannel)
+				channels.PUT("/:id", adminConfigHandler.UpdateChannel)
+				channels.DELETE("/:id", adminConfigHandler.DeleteChannel)
+				channels.POST("/:id/sync-models", adminConfigHandler.SyncChannelModels)
+				channels.POST("/:id/models", adminConfigHandler.BindChannelModel)
+				channels.PUT("/:id/models/:modelID/status", adminConfigHandler.UpdateChannelModelStatus)
+			}
 
 			// 用户管理
 			users := adminV1.Group("/users")
 			{
 				users.GET("", adminHandler.GetUserList)
-					users.POST("", adminHandler.CreateUser)
-					users.PUT("/:id", adminHandler.UpdateUser)
+				users.POST("", adminHandler.CreateUser)
+				users.PUT("/:id", adminHandler.UpdateUser)
+				users.POST("/:id/credits", middleware.RequireRole("admin"), adminHandler.RechargeUserCredit)
 				users.PUT("/:id/status", adminHandler.UpdateUserStatus)
+			}
+			tasks := adminV1.Group("/tasks")
+			{
+				tasks.GET("", adminHandler.GetTaskList)
 			}
 		}
 

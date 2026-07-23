@@ -23,6 +23,10 @@
           <el-icon><Picture /></el-icon>
           <span>作品审核</span>
         </el-menu-item>
+        <el-menu-item index="/tasks">
+          <el-icon><List /></el-icon>
+          <span>生成记录</span>
+        </el-menu-item>
         <el-menu-item index="/reports">
           <el-icon><TrendCharts /></el-icon>
           <span>数据报表</span>
@@ -87,7 +91,7 @@ import {
   Lock,
   Setting,
   UserFilled
-  ,Key
+  ,Key, List
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 

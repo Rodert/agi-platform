@@ -16,7 +16,16 @@
 
         <el-table-column label="作品" width="120">
           <template #default="{ row }">
+            <video
+              v-if="row.type === 'video'"
+              :src="row.video_url"
+              :poster="row.image_url || undefined"
+              muted
+              preload="metadata"
+              style="width: 80px; height: 80px; border-radius: 4px; object-fit: cover"
+            />
             <el-image
+              v-else
               :src="row.image_url"
               :preview-src-list="[row.image_url]"
               style="width: 80px; height: 80px; border-radius: 4px"

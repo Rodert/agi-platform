@@ -1,10 +1,13 @@
 package service
 
 import (
+	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/javapub/agi-platform-backend/internal/dto"
 	"github.com/javapub/agi-platform-backend/internal/model"
+	"github.com/javapub/agi-platform-backend/internal/objectstorage"
 	"github.com/javapub/agi-platform-backend/internal/repository"
 	"github.com/javapub/agi-platform-backend/pkg/config"
 	"github.com/javapub/agi-platform-backend/pkg/errors"
@@ -14,23 +17,38 @@ import (
 )
 
 type AdminService struct {
-	adminRepo *repository.AdminRepository
-	workRepo  *repository.WorkRepository
-	userRepo  *repository.UserRepository
-	jwtConfig *config.JWTConfig
+	adminRepo  *repository.AdminRepository
+	workRepo   *repository.WorkRepository
+	taskRepo   *repository.TaskRepository
+	userRepo   *repository.UserRepository
+	creditRepo *repository.CreditRepository
+	assetRepo  *repository.MediaAssetRepository
+	storage    *objectstorage.Manager
+	jwtConfig  *config.JWTConfig
+	db         *gorm.DB
 }
 
 func NewAdminService(
 	adminRepo *repository.AdminRepository,
 	workRepo *repository.WorkRepository,
+	taskRepo *repository.TaskRepository,
 	userRepo *repository.UserRepository,
+	creditRepo *repository.CreditRepository,
+	assetRepo *repository.MediaAssetRepository,
+	storage *objectstorage.Manager,
 	jwtConfig *config.JWTConfig,
+	db *gorm.DB,
 ) *AdminService {
 	return &AdminService{
-		adminRepo: adminRepo,
-		workRepo:  workRepo,
-		userRepo:  userRepo,
-		jwtConfig: jwtConfig,
+		adminRepo:  adminRepo,
+		workRepo:   workRepo,
+		taskRepo:   taskRepo,
+		userRepo:   userRepo,
+		creditRepo: creditRepo,
+		assetRepo:  assetRepo,
+		storage:    storage,
+		jwtConfig:  jwtConfig,
+		db:         db,
 	}
 }
 
@@ -56,7 +74,7 @@ func (s *AdminService) Login(req *dto.AdminLoginRequest, ip string) (*dto.AdminL
 	}
 
 	// 4. 生成Token（管理员）
-	token, err := jwt.GenerateAdminToken(admin.ID, admin.Username, admin.Name, s.jwtConfig)
+	token, err := jwt.GenerateAdminToken(admin.ID, admin.Username, admin.Role, s.jwtConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -99,44 +117,109 @@ func (s *AdminService) AuditWork(adminID, workID int64, req *dto.AdminWorkAuditR
 		return errors.New(errors.ErrCodeBadRequest, "该作品已审核")
 	}
 
-	// 3. 更新作品状态
+	// 3. An approved work gets an independent, permanent object. Rejected works
+	// keep using the temporary task object until its normal lifecycle removes it.
+	var publishedAssets []*model.MediaAsset
+	if req.Status == "approved" {
+		publishedAssets, err = s.promoteWorkAssets(work)
+		if err != nil {
+			return errors.New(errors.ErrCodeBadRequest, "无法发布作品资源: "+err.Error())
+		}
+	}
+
+	// 4. 更新作品状态和审核记录。对象已经复制成功后才允许作品进入首页列表。
 	now := time.Now()
 	work.AuditStatus = req.Status
 	work.AuditReason = req.Reason
 	work.AuditAdminID = adminID
 	work.AuditedAt = &now
 	work.UpdatedAt = now
-
-	if err := s.workRepo.Update(work); err != nil {
-		return err
+	if req.Status == "approved" {
+		work.PublishedAt = &now
 	}
-
-	// 4. 创建审核记录
 	audit := &model.WorkAudit{
-		WorkID:     workID,
-		AdminID:    adminID,
-		Status:     req.Status,
-		Reason:     req.Reason,
-		AuditedAt:  now,
-		CreatedAt:  now,
+		WorkID:    workID,
+		AdminID:   adminID,
+		Status:    req.Status,
+		Reason:    req.Reason,
+		AuditedAt: now,
+		CreatedAt: now,
 	}
-	if err := s.workRepo.CreateAudit(audit); err != nil {
-		return err
-	}
-
-	// 5. 记录操作日志
-	if err := s.adminRepo.CreateLog(&model.AdminLog{
+	log := &model.AdminLog{
 		AdminID:     adminID,
 		Action:      "audit_work",
 		TargetType:  "work",
 		TargetID:    workID,
 		Description: "审核作品：" + req.Status,
 		CreatedAt:   time.Now(),
-	}); err != nil {
-		return err
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(work).Error; err != nil {
+			return err
+		}
+		for _, asset := range publishedAssets {
+			if err := tx.Create(asset).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Create(audit).Error; err != nil {
+			return err
+		}
+		return tx.Create(log).Error
+	})
+}
+
+func (s *AdminService) promoteWorkAssets(work *model.Work) ([]*model.MediaAsset, error) {
+	task, err := s.taskRepo.FindByID(work.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	if task.Status != "success" || task.ResultURL == "" {
+		return nil, errors.New(errors.ErrCodeBadRequest, "原始生成任务不可用于发布")
+	}
+	assetType, publishedType := "image", "published_image"
+	if work.Type == "video" {
+		assetType, publishedType = "video", "published_video"
+	}
+	content, err := s.assetRepo.FindByTaskAndURL(task.ID, assetType, task.ResultURL)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New(errors.ErrCodeNotFound, "原始生成资源不存在或已清理")
+		}
+		return nil, err
+	}
+	published, err := s.storage.Promote(context.Background(), content, publishedType)
+	if err != nil {
+		return nil, err
+	}
+	contentAsset := mediaAssetFromPublished(work, task.ID, published)
+	assets := []*model.MediaAsset{contentAsset}
+	if work.Type == "image" {
+		work.ImageURL, work.VideoURL = published.PublicURL, ""
+		return assets, nil
 	}
 
-	return nil
+	work.ImageURL, work.VideoURL = "", published.PublicURL
+	if task.ThumbnailURL == "" || task.ThumbnailURL == task.ResultURL {
+		return assets, nil
+	}
+	thumbnail, err := s.assetRepo.FindByTaskAndURL(task.ID, "thumbnail", task.ThumbnailURL)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New(errors.ErrCodeNotFound, "视频缩略图不存在或已清理")
+		}
+		return nil, err
+	}
+	publishedThumbnail, err := s.storage.Promote(context.Background(), thumbnail, "published_thumbnail")
+	if err != nil {
+		return nil, err
+	}
+	work.ImageURL = publishedThumbnail.PublicURL
+	return append(assets, mediaAssetFromPublished(work, task.ID, publishedThumbnail)), nil
+}
+
+func mediaAssetFromPublished(work *model.Work, taskID int64, stored *objectstorage.StoredObject) *model.MediaAsset {
+	return &model.MediaAsset{TaskID: &taskID, UserID: work.UserID, StorageConfigID: stored.StorageConfigID, ResourceType: stored.ResourceType, ObjectKey: stored.ObjectKey, PublicURL: stored.PublicURL, ContentType: stored.ContentType, SizeBytes: stored.SizeBytes, ExpiresAt: stored.ExpiresAt, CreatedAt: time.Now()}
 }
 
 // GetPendingWorks 获取待审核作品列表
@@ -188,4 +271,53 @@ func (s *AdminService) GetStats() (*dto.AdminStatsResponse, error) {
 		TodayTasks:   stats["today_tasks"],
 		TodayWorks:   stats["today_works"],
 	}, nil
+}
+
+func (s *AdminService) GetTaskList(req *dto.AdminTaskListRequest) ([]*dto.AdminTaskResponse, int64, error) {
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+	tasks, total, err := s.taskRepo.FindAdminTasks(req.Keyword, req.Status, req.Type, req.Page, req.PageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	responses := make([]*dto.AdminTaskResponse, 0, len(tasks))
+	for _, task := range tasks {
+		params := map[string]interface{}{}
+		if task.Request != nil && len(task.Request.Params) > 0 {
+			_ = json.Unmarshal(task.Request.Params, &params)
+		}
+		item := &dto.AdminTaskResponse{ID: task.ID, UserID: task.UserID, ModelName: task.ModelName, Type: task.Type, Status: task.Status, Progress: task.Progress, Prompt: task.Prompt, Params: params, Cost: task.Cost, ResultURL: task.ResultURL, ThumbnailURL: task.ThumbnailURL, ErrorMsg: task.ErrorMsg, AttemptCount: task.AttemptCount, MaxRetryAttempts: task.MaxRetryAttempts, CreatedAt: task.CreatedAt.Format("2006-01-02 15:04:05")}
+		if task.User != nil {
+			item.UserName, item.UserEmail = task.User.Name, task.User.Email
+		}
+		if task.Channel != nil {
+			item.ChannelName = task.Channel.Name
+		}
+		if task.CompletedAt != nil {
+			item.CompletedAt = task.CompletedAt.Format("2006-01-02 15:04:05")
+		}
+		if task.LastRetryAt != nil {
+			item.LastRetryAt = task.LastRetryAt.Format("2006-01-02 15:04:05")
+		}
+		for _, attempt := range task.Attempts {
+			entry := dto.AdminTaskAttemptResponse{Attempt: attempt.Attempt, Status: attempt.Status, ErrorMsg: attempt.ErrorMsg, StartedAt: attempt.StartedAt.Format("2006-01-02 15:04:05")}
+			if attempt.CompletedAt != nil {
+				entry.CompletedAt = attempt.CompletedAt.Format("2006-01-02 15:04:05")
+			}
+			item.Attempts = append(item.Attempts, entry)
+		}
+		for _, asset := range task.Assets {
+			entry := dto.AdminMediaAssetResponse{ResourceType: asset.ResourceType, StorageConfigID: asset.StorageConfigID, ObjectKey: asset.ObjectKey, PublicURL: asset.PublicURL, ContentType: asset.ContentType, SizeBytes: asset.SizeBytes}
+			if asset.ExpiresAt != nil {
+				entry.ExpiresAt = asset.ExpiresAt.Format("2006-01-02 15:04:05")
+			}
+			item.Assets = append(item.Assets, entry)
+		}
+		responses = append(responses, item)
+	}
+	return responses, total, nil
 }

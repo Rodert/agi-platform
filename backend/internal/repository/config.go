@@ -1,9 +1,9 @@
 package repository
 
 import (
-	"time"
 	"github.com/javapub/agi-platform-backend/internal/model"
 	"gorm.io/gorm"
+	"time"
 )
 
 type ConfigRepository struct {
@@ -58,10 +58,32 @@ func (r *ConfigRepository) UpsertSystemConfig(key, value, configType, category, 
 	if err == gorm.ErrRecordNotFound {
 		return r.db.Create(&model.SystemConfig{Key: key, Value: value, Type: configType, Category: category, Description: description, UpdatedAt: time.Now()}).Error
 	}
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	config.Value = value
 	config.UpdatedAt = time.Now()
 	return r.db.Save(&config).Error
+}
+
+// GetTaskConfig loads the singleton task policy. The fallback keeps older
+// deployments operational until the migration is applied.
+func (r *ConfigRepository) GetTaskConfig() (*model.TaskConfig, error) {
+	config := &model.TaskConfig{}
+	err := r.db.First(config, 1).Error
+	if err == gorm.ErrRecordNotFound {
+		return &model.TaskConfig{ID: 1, MaxActiveTasks: 50, PromptMaxLength: 5000, MaxRetryAttempts: 0}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func (r *ConfigRepository) UpdateTaskConfig(config *model.TaskConfig) error {
+	config.ID = 1
+	config.UpdatedAt = time.Now()
+	return r.db.Save(config).Error
 }
 
 // GetCategories 获取分类列表

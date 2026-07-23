@@ -11,12 +11,13 @@ import (
 func (s *CreationService) publishTask(task *model.Task, params map[string]interface{}) error {
 	ctx := context.Background()
 	msg := &queue.TaskMessage{
-		TaskID:    task.ID,
-		UserID:    task.UserID,
-		Type:      task.Type,
-		Prompt:    task.Prompt,
-		ModelName: task.ModelName,
-		Params:    params,
+		TaskID:           task.ID,
+		UserID:           task.UserID,
+		Type:             task.Type,
+		Prompt:           task.Prompt,
+		ModelName:        task.ModelName,
+		Params:           params,
+		MaxRetryAttempts: task.MaxRetryAttempts,
 	}
 	return s.queueProducer.Publish(ctx, msg)
 }

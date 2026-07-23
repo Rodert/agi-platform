@@ -4,39 +4,145 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
 
 	"github.com/javapub/agi-platform-backend/internal/model"
 )
 
-// GetAdapter 根据 AI 模型获取适配器
-func GetAdapter(aiModel *model.AIModel) (Adapter, error) {
+var factories = map[string]Factory{}
+
+func Register(provider string, factory Factory) { factories[provider] = factory }
+
+func init() {
+	Register("openai", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
+	Register("chatgpt", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
+	Register("jimeng", func(config map[string]interface{}) (Adapter, error) { return NewJimengAdapter(config), nil })
+	Register("demo", func(config map[string]interface{}) (Adapter, error) { return NewDemoAdapter(), nil })
+}
+
+// GetAdapter resolves a provider implementation from the registry. Provider
+// modules can be added without changing task orchestration code.
+func GetAdapter(aiModel *model.AIModel, channel *model.AIProviderAccount) (Adapter, error) {
 	// 解析 API 配置
 	var apiConfig map[string]interface{}
 	if err := json.Unmarshal(aiModel.APIConfig, &apiConfig); err != nil {
 		return nil, fmt.Errorf("解析 API 配置失败: %w", err)
 	}
-	if account := aiModel.ProviderAccount; account != nil {
-		apiConfig["api_url"] = account.APIURL
-		apiConfig["api_key"] = account.APIKey
-		if len(account.ExtraConfig) > 0 {
+	if channel != nil {
+		apiConfig["api_url"] = channel.APIURL
+		apiConfig["api_key"] = channel.APIKey
+		if len(channel.ExtraConfig) > 0 {
 			var extra map[string]interface{}
-			if json.Unmarshal(account.ExtraConfig, &extra) == nil {
+			if json.Unmarshal(channel.ExtraConfig, &extra) == nil {
 				for key, value := range extra { apiConfig[key] = value }
 			}
 		}
 	}
 
 	// 根据提供商返回对应的适配器
-	switch aiModel.Provider {
-	case "openai":
-		return NewOpenAIAdapter(apiConfig), nil
-	case "jimeng":
-		return NewJimengAdapter(apiConfig), nil
-	case "demo":
-		return NewDemoAdapter(), nil
-	default:
-		return nil, fmt.Errorf("不支持的提供商: %s", aiModel.Provider)
+	provider := aiModel.Provider
+	if channel != nil {
+		provider = channel.Provider
 	}
+	factory, ok := factories[provider]
+	if !ok { return nil, fmt.Errorf("不支持的提供商: %s", provider) }
+	return factory(apiConfig)
+}
+
+// DiscoverModels asks an upstream channel which image and video models it
+// exposes. The adapter normalizes only the model name and type; user-facing
+// capability schemas remain in the model catalog.
+func DiscoverModels(ctx context.Context, channel *model.AIProviderAccount) ([]DiscoveredModel, error) {
+	switch channel.Provider {
+	case "openai", "chatgpt":
+		return discoverOpenAIModels(ctx, channel)
+	case "gemini":
+		return discoverGeminiModels(ctx, channel)
+	case "demo":
+		return []DiscoveredModel{{Name: "demo-image", Type: "image"}}, nil
+	default:
+		return nil, fmt.Errorf("渠道 %s 尚未实现模型发现", channel.Provider)
+	}
+}
+
+func discoverOpenAIModels(ctx context.Context, channel *model.AIProviderAccount) ([]DiscoveredModel, error) {
+	endpoint := modelListEndpoint(channel.APIURL, "/v1/models")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+channel.APIKey)
+	var payload struct { Data []struct { ID string `json:"id"` } `json:"data"` }
+	if err := doJSON(req, &payload); err != nil {
+		return nil, err
+	}
+	return normalizeDiscoveredModels(func() []string { ids := make([]string, 0, len(payload.Data)); for _, item := range payload.Data { ids = append(ids, item.ID) }; return ids }()), nil
+}
+
+func discoverGeminiModels(ctx context.Context, channel *model.AIProviderAccount) ([]DiscoveredModel, error) {
+	endpoint := modelListEndpoint(channel.APIURL, "/v1beta/models")
+	parsed, err := url.Parse(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	query := parsed.Query()
+	query.Set("key", channel.APIKey)
+	parsed.RawQuery = query.Encode()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct { Models []struct { Name string `json:"name"` } `json:"models"` }
+	if err := doJSON(req, &payload); err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(payload.Models))
+	for _, item := range payload.Models { ids = append(ids, strings.TrimPrefix(item.Name, "models/")) }
+	return normalizeDiscoveredModels(ids), nil
+}
+
+func modelListEndpoint(rawURL, suffix string) string {
+	base := strings.TrimRight(rawURL, "/")
+	if strings.HasSuffix(base, "/v1") { base = strings.TrimSuffix(base, "/v1") }
+	if strings.HasSuffix(base, "/v1beta") { base = strings.TrimSuffix(base, "/v1beta") }
+	if index := strings.Index(base, "/v1/"); index >= 0 { base = base[:index] }
+	if index := strings.Index(base, "/v1beta/"); index >= 0 { base = base[:index] }
+	return base + suffix
+}
+
+func doJSON(req *http.Request, target interface{}) error {
+	client := &http.Client{Timeout: 15 * time.Second}
+	response, err := client.Do(req)
+	if err != nil { return err }
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("模型发现请求失败: %s", response.Status)
+	}
+	return json.NewDecoder(response.Body).Decode(target)
+}
+
+func normalizeDiscoveredModels(names []string) []DiscoveredModel {
+	models := make([]DiscoveredModel, 0, len(names))
+	seen := map[string]bool{}
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] { continue }
+		modelType := discoveredType(name)
+		if modelType == "" { continue }
+		seen[name] = true
+		models = append(models, DiscoveredModel{Name: name, Type: modelType})
+	}
+	return models
+}
+
+func discoveredType(name string) string {
+	name = strings.ToLower(name)
+	if strings.Contains(name, "image") || strings.Contains(name, "dall-e") || strings.Contains(name, "seedream") || strings.Contains(name, "flux") { return "image" }
+	if strings.Contains(name, "video") || strings.Contains(name, "sora") || strings.Contains(name, "veo") || strings.Contains(name, "kling") || strings.Contains(name, "runway") { return "video" }
+	return ""
 }
 
 // DemoAdapter 演示适配器（用于测试）
@@ -57,26 +163,6 @@ func (a *DemoAdapter) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 	}, nil
 }
 
-// OpenAIAdapter OpenAI 适配器
-type OpenAIAdapter struct {
-	apiConfig map[string]interface{}
-}
-
-func NewOpenAIAdapter(apiConfig map[string]interface{}) *OpenAIAdapter {
-	return &OpenAIAdapter{apiConfig: apiConfig}
-}
-
-func (a *OpenAIAdapter) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	// TODO: 调用 OpenAI DALL-E API
-	// apiURL := a.apiConfig["api_url"].(string)
-	// apiKey := a.apiConfig["api_key"].(string)
-
-	// 临时返回演示数据
-	return &GenerateResponse{
-		ImageURL: "https://picsum.photos/1024/1024",
-	}, nil
-}
-
 // JimengAdapter 即梦适配器
 type JimengAdapter struct {
 	apiConfig map[string]interface{}
@@ -87,12 +173,5 @@ func NewJimengAdapter(apiConfig map[string]interface{}) *JimengAdapter {
 }
 
 func (a *JimengAdapter) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	// TODO: 调用即梦 API
-	// apiURL := a.apiConfig["api_url"].(string)
-	// apiKey := a.apiConfig["api_key"].(string)
-
-	// 临时返回演示数据
-	return &GenerateResponse{
-		ImageURL: "https://picsum.photos/1024/1024",
-	}, nil
+	return nil, fmt.Errorf("即梦适配器尚未实现真实生成协议")
 }

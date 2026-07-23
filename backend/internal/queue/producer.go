@@ -12,12 +12,14 @@ import (
 
 // TaskMessage 任务消息
 type TaskMessage struct {
-	TaskID    int64                  `json:"task_id"`
-	UserID    int64                  `json:"user_id"`
-	Type      string                 `json:"type"` // image/video/product
-	Prompt    string                 `json:"prompt"`
-	ModelName string                 `json:"model_name"`
-	Params    map[string]interface{} `json:"params"`
+	TaskID           int64                  `json:"task_id"`
+	UserID           int64                  `json:"user_id"`
+	Type             string                 `json:"type"` // image/video/product
+	Prompt           string                 `json:"prompt"`
+	ModelName        string                 `json:"model_name"`
+	Params           map[string]interface{} `json:"params"`
+	Attempt          int                    `json:"attempt"`
+	MaxRetryAttempts int                    `json:"max_retry_attempts"`
 }
 
 // Producer 任务生产者

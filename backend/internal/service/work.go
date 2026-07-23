@@ -66,7 +66,6 @@ func (s *WorkService) PublishWork(userID int64, req *dto.PublishWorkRequest) (*d
 		ImageURL:    task.ResultURL,
 		VideoURL:    task.ResultURL,
 		AuditStatus: "pending",
-		PublishedAt: &now,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}

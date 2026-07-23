@@ -30,9 +30,11 @@ func (s *StorageConfigService) GetStorageConfigs() ([]*dto.StorageConfigResponse
 	responses := make([]*dto.StorageConfigResponse, len(configs))
 	for i, cfg := range configs {
 		responses[i] = s.toResponse(cfg)
-		// 脱敏 SecretKey
+		if cfg.AccessKey != "" {
+			responses[i].AccessKey = "***"
+		}
 		if cfg.SecretKey != "" {
-			responses[i].SecretKey = "***" + cfg.SecretKey[len(cfg.SecretKey)-4:]
+			responses[i].SecretKey = "***"
 		}
 	}
 
@@ -41,6 +43,9 @@ func (s *StorageConfigService) GetStorageConfigs() ([]*dto.StorageConfigResponse
 
 // CreateStorageConfig 创建存储配置
 func (s *StorageConfigService) CreateStorageConfig(req *dto.StorageConfigRequest) (*dto.StorageConfigResponse, error) {
+	if err := validateStorageConfig(req); err != nil {
+		return nil, err
+	}
 	config := &model.StorageConfig{
 		Name:      req.Name,
 		Type:      req.Type,
@@ -72,12 +77,24 @@ func (s *StorageConfigService) UpdateStorageConfig(id int64, req *dto.StorageCon
 		}
 		return nil, err
 	}
+	validationReq := *req
+	if validationReq.AccessKey == "" {
+		validationReq.AccessKey = config.AccessKey
+	}
+	if validationReq.SecretKey == "" {
+		validationReq.SecretKey = config.SecretKey
+	}
+	if err := validateStorageConfig(&validationReq); err != nil {
+		return nil, err
+	}
 
 	config.Name = req.Name
 	config.Type = req.Type
 	config.LocalPath = req.LocalPath
 	config.Endpoint = req.Endpoint
-	config.AccessKey = req.AccessKey
+	if req.AccessKey != "" {
+		config.AccessKey = req.AccessKey
+	}
 	if req.SecretKey != "" {
 		config.SecretKey = req.SecretKey
 	}
@@ -91,6 +108,16 @@ func (s *StorageConfigService) UpdateStorageConfig(id int64, req *dto.StorageCon
 	}
 
 	return s.toResponse(config), nil
+}
+
+func validateStorageConfig(req *dto.StorageConfigRequest) error {
+	if req.Type == "local" && req.LocalPath == "" {
+		return errors.New(errors.ErrCodeBadRequest, "本地存储必须填写本地路径")
+	}
+	if req.Type == "cloudflare" && (req.Endpoint == "" || req.Bucket == "" || req.AccessKey == "" || req.SecretKey == "" || req.Domain == "") {
+		return errors.New(errors.ErrCodeBadRequest, "Cloudflare R2 必须填写 Endpoint、Access Key、Secret Key、Bucket 和访问域名")
+	}
+	return nil
 }
 
 // EnableStorageConfig 启用存储配置
@@ -117,14 +144,12 @@ func (s *StorageConfigService) DeleteStorageConfig(id int64) error {
 
 // toResponse 转换为响应
 func (s *StorageConfigService) toResponse(cfg *model.StorageConfig) *dto.StorageConfigResponse {
-	return &dto.StorageConfigResponse{
+	response := &dto.StorageConfigResponse{
 		ID:        cfg.ID,
 		Name:      cfg.Name,
 		Type:      cfg.Type,
 		LocalPath: cfg.LocalPath,
 		Endpoint:  cfg.Endpoint,
-		AccessKey: cfg.AccessKey,
-		SecretKey: cfg.SecretKey,
 		Bucket:    cfg.Bucket,
 		Region:    cfg.Region,
 		Domain:    cfg.Domain,
@@ -132,4 +157,11 @@ func (s *StorageConfigService) toResponse(cfg *model.StorageConfig) *dto.Storage
 		CreatedAt: cfg.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt: cfg.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
+	if cfg.AccessKey != "" {
+		response.AccessKey = "***"
+	}
+	if cfg.SecretKey != "" {
+		response.SecretKey = "***"
+	}
+	return response
 }

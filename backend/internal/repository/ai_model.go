@@ -16,9 +16,9 @@ func NewAIModelRepository(db *gorm.DB) *AIModelRepository {
 // FindByName 根据名称查找模型
 func (r *AIModelRepository) FindByName(name string) (*model.AIModel, error) {
 	var aiModel model.AIModel
-	err := r.db.Preload("ProviderAccount").
-		Joins("LEFT JOIN ai_provider_accounts a ON a.id = ai_models.provider_account_id").
-		Where("ai_models.name = ? AND ai_models.is_active = ? AND (ai_models.provider_account_id IS NULL OR a.is_active = ?)", name, true, true).
+	err := r.db.
+		Where("ai_models.name = ?", name).
+		Where("EXISTS (SELECT 1 FROM channel_models cm JOIN ai_provider_accounts c ON c.id = cm.channel_id WHERE cm.model_id = ai_models.id AND cm.is_active = ? AND c.is_active = ?)", true, true).
 		First(&aiModel).Error
 	if err != nil {
 		return nil, err
@@ -29,8 +29,7 @@ func (r *AIModelRepository) FindByName(name string) (*model.AIModel, error) {
 // GetActiveModels 获取启用的模型列表
 func (r *AIModelRepository) GetActiveModels(modelType string) ([]*model.AIModel, error) {
 	var models []*model.AIModel
-	query := r.db.Joins("LEFT JOIN ai_provider_accounts a ON a.id = ai_models.provider_account_id").
-		Where("ai_models.is_active = ? AND (ai_models.provider_account_id IS NULL OR a.is_active = ?)", true, true)
+	query := r.db.Where("EXISTS (SELECT 1 FROM channel_models cm JOIN ai_provider_accounts c ON c.id = cm.channel_id WHERE cm.model_id = ai_models.id AND cm.is_active = ? AND c.is_active = ?)", true, true)
 
 	if modelType != "" {
 		query = query.Where("ai_models.type = ?", modelType)
@@ -42,7 +41,7 @@ func (r *AIModelRepository) GetActiveModels(modelType string) ([]*model.AIModel,
 
 func (r *AIModelRepository) GetAllModels() ([]*model.AIModel, error) {
 	var models []*model.AIModel
-	err := r.db.Preload("ProviderAccount").Order("type ASC, sort_order ASC, id ASC").Find(&models).Error
+	err := r.db.Order("type ASC, sort_order ASC, id ASC").Find(&models).Error
 	return models, err
 }
 
@@ -54,6 +53,16 @@ func (r *AIModelRepository) FindByID(id int64) (*model.AIModel, error) {
 		return nil, err
 	}
 	return &aiModel, nil
+}
+
+func (r *AIModelRepository) FindByNameAny(name string) (*model.AIModel, error) {
+	var aiModel model.AIModel
+	err := r.db.Where("name = ?", name).First(&aiModel).Error
+	return &aiModel, err
+}
+
+func (r *AIModelRepository) Create(aiModel *model.AIModel) error {
+	return r.db.Create(aiModel).Error
 }
 
 // Update 更新模型

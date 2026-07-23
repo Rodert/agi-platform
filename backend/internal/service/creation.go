@@ -1,12 +1,15 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/javapub/agi-platform-backend/internal/dto"
 	"github.com/javapub/agi-platform-backend/internal/model"
+	"github.com/javapub/agi-platform-backend/internal/objectstorage"
 	"github.com/javapub/agi-platform-backend/internal/queue"
 	"github.com/javapub/agi-platform-backend/internal/repository"
 	"github.com/javapub/agi-platform-backend/pkg/errors"
@@ -16,40 +19,54 @@ import (
 )
 
 type CreationService struct {
-	taskRepo       *repository.TaskRepository
-	requestRepo    *repository.GenerationRequestRepository
-	aiModelRepo    *repository.AIModelRepository
-	creditRepo     *repository.CreditRepository
-	configRepo     *repository.ConfigRepository
-	storageService *StorageService
-	queueProducer  *queue.Producer
-	db             *gorm.DB
+	taskRepo         *repository.TaskRepository
+	requestRepo      *repository.GenerationRequestRepository
+	aiModelRepo      *repository.AIModelRepository
+	channelModelRepo *repository.ChannelModelRepository
+	creditRepo       *repository.CreditRepository
+	assetRepo        *repository.MediaAssetRepository
+	configRepo       *repository.ConfigRepository
+	storageService   *StorageService
+	queueProducer    *queue.Producer
+	db               *gorm.DB
 }
 
 func NewCreationService(
 	taskRepo *repository.TaskRepository,
 	requestRepo *repository.GenerationRequestRepository,
 	aiModelRepo *repository.AIModelRepository,
+	channelModelRepo *repository.ChannelModelRepository,
 	creditRepo *repository.CreditRepository,
+	assetRepo *repository.MediaAssetRepository,
 	configRepo *repository.ConfigRepository,
 	storageService *StorageService,
 	queueProducer *queue.Producer,
 	db *gorm.DB,
 ) *CreationService {
 	return &CreationService{
-		taskRepo:       taskRepo,
-		requestRepo:    requestRepo,
-		aiModelRepo:    aiModelRepo,
-		creditRepo:     creditRepo,
-		configRepo:     configRepo,
-		storageService: storageService,
-		queueProducer:  queueProducer,
-		db:             db,
+		taskRepo:         taskRepo,
+		requestRepo:      requestRepo,
+		aiModelRepo:      aiModelRepo,
+		channelModelRepo: channelModelRepo,
+		creditRepo:       creditRepo,
+		assetRepo:        assetRepo,
+		configRepo:       configRepo,
+		storageService:   storageService,
+		queueProducer:    queueProducer,
+		db:               db,
 	}
 }
 
 // CreateImageTask 创建图片生成任务
 func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTaskRequest) (*dto.TaskResponse, error) {
+	taskConfig, err := s.getTaskConfig()
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePrompt(req.Prompt, taskConfig.PromptMaxLength); err != nil {
+		return nil, err
+	}
+
 	// 1. 验证模型
 	aiModel, err := s.aiModelRepo.FindByName(req.ModelName)
 	if err != nil {
@@ -62,6 +79,10 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 	if aiModel.Type != "image" {
 		return nil, errors.New(errors.ErrCodeBadRequest, "该模型不支持图片生成")
 	}
+	channelBinding, err := s.channelModelRepo.SelectActiveChannel(aiModel.ID)
+	if err != nil {
+		return nil, errors.New(errors.ErrCodeBadRequest, "该模型当前没有可用渠道")
+	}
 
 	// 2. 校验模型参数并计算费用
 	params, cost, err := s.resolveModelParams(aiModel, req.Params)
@@ -70,19 +91,20 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 	}
 
 	// 3. 检查并发任务数限制
-	maxConcurrent := 3 // 从配置读取
-	if err := s.checkConcurrentLimit(userID, maxConcurrent); err != nil {
+	if err := s.checkConcurrentLimit(userID, taskConfig.MaxActiveTasks); err != nil {
 		return nil, err
 	}
 
 	// 4. 处理参考图（Base64 → URL）
 	var referenceURL string
+	var referenceStored *objectstorage.StoredObject
 	if req.ReferenceImage != "" {
-		url, err := s.storageService.UploadBase64Image(req.ReferenceImage)
+		stored, err := s.storageService.UploadBase64Image(context.Background(), req.ReferenceImage)
 		if err != nil {
 			return nil, errors.NewWithDetails(errors.ErrCodeUploadFailed, "参考图上传失败", err.Error())
 		}
-		referenceURL = url
+		referenceURL = stored.PublicURL
+		referenceStored = stored
 	}
 
 	// 5. 构建任务参数
@@ -116,20 +138,27 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 
 		// 创建任务
 		task = &model.Task{
-			UserID:    userID,
-			RequestID: genReq.ID,
-			Title:     utils.TruncateString(req.Prompt, 50),
-			Type:      "image",
-			Status:    "queued",
-			Progress:  0,
-			Prompt:    req.Prompt,
-			ModelName: req.ModelName,
-			Cost:      cost,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			UserID:           userID,
+			RequestID:        genReq.ID,
+			Title:            utils.TruncateString(req.Prompt, 50),
+			Type:             "image",
+			Status:           "queued",
+			Progress:         0,
+			Prompt:           req.Prompt,
+			ModelName:        req.ModelName,
+			ChannelID:        channelBinding.ChannelID,
+			MaxRetryAttempts: taskConfig.MaxRetryAttempts,
+			Cost:             cost,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
 		}
 		if err := tx.Create(task).Error; err != nil {
 			return err
+		}
+		if req.ReferenceImage != "" {
+			if err := s.assetRepo.CreateTx(tx, mediaAssetFromStored(userID, &task.ID, referenceStored)); err != nil {
+				return err
+			}
 		}
 
 		// 更新请求的 TaskID
@@ -157,6 +186,14 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 
 // CreateVideoTask 创建视频生成任务
 func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTaskRequest) (*dto.TaskResponse, error) {
+	taskConfig, err := s.getTaskConfig()
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePrompt(req.Prompt, taskConfig.PromptMaxLength); err != nil {
+		return nil, err
+	}
+
 	// 1. 验证模型
 	aiModel, err := s.aiModelRepo.FindByName(req.ModelName)
 	if err != nil {
@@ -169,6 +206,10 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 	if aiModel.Type != "video" {
 		return nil, errors.New(errors.ErrCodeBadRequest, "该模型不支持视频生成")
 	}
+	channelBinding, err := s.channelModelRepo.SelectActiveChannel(aiModel.ID)
+	if err != nil {
+		return nil, errors.New(errors.ErrCodeBadRequest, "该模型当前没有可用渠道")
+	}
 
 	// 2. 校验模型参数并计算费用
 	params, cost, err := s.resolveModelParams(aiModel, req.Params)
@@ -177,8 +218,7 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 	}
 
 	// 3. 检查并发任务数限制
-	maxConcurrent := 3
-	if err := s.checkConcurrentLimit(userID, maxConcurrent); err != nil {
+	if err := s.checkConcurrentLimit(userID, taskConfig.MaxActiveTasks); err != nil {
 		return nil, err
 	}
 
@@ -216,17 +256,19 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 
 		// 创建任务
 		task = &model.Task{
-			UserID:    userID,
-			RequestID: genReq.ID,
-			Title:     utils.TruncateString(req.Prompt, 50),
-			Type:      "video",
-			Status:    "queued",
-			Progress:  0,
-			Prompt:    req.Prompt,
-			ModelName: req.ModelName,
-			Cost:      cost,
-			CreatedAt: time.Now(),
-			UpdatedAt: time.Now(),
+			UserID:           userID,
+			RequestID:        genReq.ID,
+			Title:            utils.TruncateString(req.Prompt, 50),
+			Type:             "video",
+			Status:           "queued",
+			Progress:         0,
+			Prompt:           req.Prompt,
+			ModelName:        req.ModelName,
+			ChannelID:        channelBinding.ChannelID,
+			MaxRetryAttempts: taskConfig.MaxRetryAttempts,
+			Cost:             cost,
+			CreatedAt:        time.Now(),
+			UpdatedAt:        time.Now(),
 		}
 		if err := tx.Create(task).Error; err != nil {
 			return err
@@ -385,7 +427,29 @@ func (s *CreationService) resolveModelParams(aiModel *model.AIModel, input map[s
 	return params, cost, nil
 }
 
-// checkConcurrentLimit 检查并发任务数限制
+func (s *CreationService) getTaskConfig() (*model.TaskConfig, error) {
+	config, err := s.configRepo.GetTaskConfig()
+	if err != nil {
+		return nil, err
+	}
+	if config.MaxActiveTasks < 1 || config.PromptMaxLength < 1 || config.MaxRetryAttempts < 0 {
+		return nil, errors.New(errors.ErrCodeInternalServer, "任务配置无效")
+	}
+	return config, nil
+}
+
+func validatePrompt(prompt string, maxLength int) error {
+	if utf8.RuneCountInString(prompt) > maxLength {
+		return errors.New(errors.ErrCodeBadRequest, fmt.Sprintf("提示词不能超过 %d 个字符", maxLength))
+	}
+	return nil
+}
+
+func mediaAssetFromStored(userID int64, taskID *int64, stored *objectstorage.StoredObject) *model.MediaAsset {
+	return &model.MediaAsset{TaskID: taskID, UserID: userID, StorageConfigID: stored.StorageConfigID, ResourceType: stored.ResourceType, ObjectKey: stored.ObjectKey, PublicURL: stored.PublicURL, ContentType: stored.ContentType, SizeBytes: stored.SizeBytes, ExpiresAt: stored.ExpiresAt, CreatedAt: time.Now()}
+}
+
+// checkConcurrentLimit 检查单用户进行中任务数限制。
 func (s *CreationService) checkConcurrentLimit(userID int64, maxConcurrent int) error {
 	count, err := s.taskRepo.CountProcessingTasks(userID)
 	if err != nil {

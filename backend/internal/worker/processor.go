@@ -18,3 +18,10 @@ type TaskMessage struct {
 type Processor interface {
 	Process(ctx context.Context, msg *TaskMessage) error
 }
+
+// RetryProcessor is optional so queue consumers remain independent of a
+// concrete generation implementation while still recording retry state.
+type RetryProcessor interface {
+	Processor
+	MarkRetrying(taskID int64) error
+}

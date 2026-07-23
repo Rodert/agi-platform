@@ -23,10 +23,12 @@
       <el-table-column prop="name" label="用户名" width="150" />
       <el-table-column prop="email" label="邮箱" width="200" />
       <el-table-column prop="level" label="会员等级" width="120" />
+      <el-table-column prop="balance" label="灵感值" width="110" />
       <el-table-column prop="created_at" label="注册时间" width="180" />
-      <el-table-column label="操作" fixed="right" width="100">
+      <el-table-column label="操作" fixed="right" width="160">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
+          <el-button size="small" type="primary" plain @click="openRecharge(row)">调整灵感值</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -61,6 +63,16 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitting">确定</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="rechargeDialog" title="调整灵感值" width="440px">
+      <el-form :model="rechargeForm" label-width="90px">
+        <el-form-item label="用户"><span>{{ rechargeUser?.name }}（{{ rechargeUser?.email }}）</span></el-form-item>
+        <el-form-item label="调整方式"><el-radio-group v-model="rechargeForm.type"><el-radio value="add">增加</el-radio><el-radio value="deduct">扣减</el-radio></el-radio-group></el-form-item>
+        <el-form-item label="调整数量" required><el-input-number v-model="rechargeForm.amount" :min="1" :max="1000000" class="w-full" /></el-form-item>
+        <el-form-item label="调整备注" required><el-input v-model="rechargeForm.remark" maxlength="200" show-word-limit type="textarea" placeholder="例如：活动补偿、违规扣减" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="rechargeDialog = false">取消</el-button><el-button :type="rechargeForm.type === 'deduct' ? 'danger' : 'primary'" :loading="recharging" @click="submitRecharge">确认调整</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -85,6 +97,10 @@ const dialogVisible = ref(false)
 const editingId = ref(0)
 const submitting = ref(false)
 const formRef = ref(null)
+const rechargeDialog = ref(false)
+const recharging = ref(false)
+const rechargeUser = ref(null)
+const rechargeForm = reactive({ type: 'add', amount: 100, remark: '' })
 const userForm = reactive({
   username: '',
   email: '',
@@ -182,6 +198,27 @@ const handleEdit = (row) => {
   editingId.value = row.id
   Object.assign(userForm, { username: row.name, email: row.email, password: '', level: row.level || 'free' })
   dialogVisible.value = true
+}
+
+const openRecharge = (row) => {
+  rechargeUser.value = row
+  Object.assign(rechargeForm, { type: 'add', amount: 100, remark: '' })
+  rechargeDialog.value = true
+}
+
+const submitRecharge = async () => {
+  if (!rechargeUser.value) return
+  if (!rechargeForm.amount || rechargeForm.amount < 1) return ElMessage.warning('请输入有效充值数量')
+  if (!rechargeForm.remark.trim()) return ElMessage.warning('请填写充值备注')
+  recharging.value = true
+  try {
+    const result = await request.post(`/users/${rechargeUser.value.id}/credits`, rechargeForm)
+    rechargeUser.value.balance = result.balance
+    rechargeDialog.value = false
+    ElMessage.success(rechargeForm.type === 'deduct' ? '灵感值已扣减' : '灵感值已增加')
+  } finally {
+    recharging.value = false
+  }
 }
 
 const handleSizeChange = () => {

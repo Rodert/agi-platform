@@ -11,7 +11,7 @@ export function WorkDetail({work,onClose}:{work:Work|null;onClose:()=>void}){
  if(!work)return null
  const go=(reference=false)=>{if(!requireAuth())return;onClose();nav(`/create?prompt=${encodeURIComponent(work.prompt)}${reference?'&reference=1':''}`)}
  const copy=async()=>{await navigator.clipboard?.writeText(work.prompt);msg.success('提示词已复制')}
- const media=work.image_url||work.video_url||'',author=work.user?.name||'用户'
+ const media=work.type==='video'?work.video_url||'':work.image_url||'',author=work.user?.name||'用户'
  return <div className="work-detail-overlay" role="dialog" aria-modal="true" aria-label="作品详情">{ctx}
   <div className="work-detail-preview"><button className="work-detail-close" aria-label="关闭" onClick={onClose}><CloseOutlined/></button>{work.type==='video'?<video src={media} controls poster={work.image_url}/>:<img src={media} alt={work.title}/>}</div>
   <aside className="work-detail-panel">

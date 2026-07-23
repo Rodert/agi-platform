@@ -14,7 +14,7 @@ button, input, textarea { font: inherit; }
 .section-title { font-size:17px; font-weight:650; margin:0 0 14px; }
 .masonry { columns:4 230px; column-gap:9px; }
 .work-card { break-inside:avoid; margin:0 0 9px; position:relative; overflow:hidden; background:#151a23; border-radius:8px; cursor:pointer; border:1px solid transparent; }
-.work-card:hover { border-color:#40515b; } .work-card img { width:100%; display:block; transition:.35s; } .work-card:hover img { transform:scale(1.018); filter:brightness(.72); }
+.work-card:hover { border-color:#40515b; } .work-card img,.work-card video { width:100%; display:block; transition:.35s; } .work-card:hover img,.work-card:hover video { transform:scale(1.018); filter:brightness(.72); }
 .work-overlay { position:absolute; inset:auto 0 0; padding:42px 13px 12px; background:linear-gradient(transparent,rgba(4,6,9,.92)); opacity:0; transform:translateY(8px); transition:.25s; }
 .work-card:hover .work-overlay { opacity:1; transform:none; } .work-meta { display:flex; justify-content:space-between; color:#b0b8c6; font-size:12px; margin-top:5px; }
 .work-actions { display:flex; gap:6px; margin:8px 0; } .work-actions button { border:1px solid rgba(255,255,255,.28); border-radius:7px; background:rgba(8,10,14,.55); color:#f1f4f8; padding:4px 8px; font-size:11px; cursor:pointer; } .work-actions button:first-child{border-color:#4ea9a7;color:#aef5f1}
