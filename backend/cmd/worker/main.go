@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -15,6 +16,7 @@ import (
 	"github.com/javapub/agi-platform-backend/pkg/config"
 	"github.com/javapub/agi-platform-backend/pkg/database"
 	"github.com/javapub/agi-platform-backend/pkg/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -55,6 +57,27 @@ func main() {
 
 	// 创建 Processor
 	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo, channelModelRepo, mediaAssetRepo, objectStorageManager)
+	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
+
+	// Redis stream entries that were in-flight during a restart are not claimed
+	// by this consumer. Persisted provider IDs let us safely enqueue polling
+	// again without creating a second upstream generation.
+	if tasks, recoverErr := taskRepo.FindPendingProviderTasks(); recoverErr != nil {
+		logger.Error("查询待恢复上游任务失败", zap.Error(recoverErr))
+	} else {
+		for _, task := range tasks {
+			params := map[string]interface{}{}
+			if task.Request != nil && len(task.Request.Params) > 0 {
+				if err := json.Unmarshal(task.Request.Params, &params); err != nil {
+					logger.Error("解析待恢复任务参数失败", zap.Int64("task_id", task.ID), zap.Error(err))
+					continue
+				}
+			}
+			if err := queueProducer.Publish(context.Background(), &queue.TaskMessage{TaskID: task.ID, UserID: task.UserID, Type: task.Type, Prompt: task.Prompt, ModelName: task.ModelName, Params: params}); err != nil {
+				logger.Error("重新投递上游任务失败", zap.Int64("task_id", task.ID), zap.Error(err))
+			}
+		}
+	}
 
 	// 创建 Consumer
 	consumer := queue.NewConsumer(

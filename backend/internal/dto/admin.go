@@ -50,6 +50,10 @@ type AdminTaskResponse struct {
 	UserName         string                     `json:"user_name"`
 	UserEmail        string                     `json:"user_email"`
 	ChannelName      string                     `json:"channel_name"`
+	ProviderTaskID   string                     `json:"provider_task_id"`
+	ProviderStatus   string                     `json:"provider_status"`
+	ProviderResponse map[string]interface{}     `json:"provider_response"`
+	LastPolledAt     string                     `json:"last_polled_at"`
 	ModelName        string                     `json:"model_name"`
 	Type             string                     `json:"type"`
 	Status           string                     `json:"status"`

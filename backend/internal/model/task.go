@@ -35,6 +35,10 @@ type Task struct {
 	Prompt           string             `gorm:"type:text;not null" json:"prompt"`
 	ModelName        string             `gorm:"size:50;not null" json:"model_name"`
 	ChannelID        int64              `gorm:"index" json:"channel_id"`
+	ProviderTaskID   string             `gorm:"size:255;index" json:"provider_task_id"`
+	ProviderStatus   string             `gorm:"size:50" json:"provider_status"`
+	ProviderResponse datatypes.JSON     `gorm:"type:json" json:"provider_response,omitempty"`
+	LastPolledAt     *time.Time         `gorm:"index" json:"last_polled_at"`
 	ResultURL        string             `gorm:"size:500" json:"result_url"`
 	ThumbnailURL     string             `gorm:"size:500" json:"thumbnail_url"`
 	ErrorMsg         string             `gorm:"size:500" json:"error_msg"`

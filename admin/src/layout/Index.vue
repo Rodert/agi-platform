@@ -27,6 +27,10 @@
           <el-icon><List /></el-icon>
           <span>生成记录</span>
         </el-menu-item>
+        <el-menu-item index="/announcements">
+          <el-icon><Bell /></el-icon>
+          <span>全员通知</span>
+        </el-menu-item>
         <el-menu-item index="/reports">
           <el-icon><TrendCharts /></el-icon>
           <span>数据报表</span>
@@ -91,7 +95,7 @@ import {
   Lock,
   Setting,
   UserFilled
-  ,Key, List
+  ,Key, List, Bell
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 

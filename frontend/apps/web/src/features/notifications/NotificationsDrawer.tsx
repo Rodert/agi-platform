@@ -1,10 +1,10 @@
-import { Drawer, List, Tag } from 'antd'
+import { Drawer, Empty, List, Spin, Tag } from 'antd'
+import { useEffect, useState } from 'react'
+import type { Announcement } from '../../types'
+import { apiClient } from '../../utils/api'
 
-const notices=[
- {title:'欢迎来到潮汐 AI',content:'新用户体验灵感值已到账，开始你的第一次创作。',time:'刚刚',type:'系统'},
- {title:'Flux Vision 2 已上线',content:'中文文字、人物细节与复杂构图能力全面提升。',time:'2 小时前',type:'产品'},
- {title:'本周创作挑战',content:'以「城市之外」为主题发布作品，赢取灵感值奖励。',time:'昨天',type:'活动'},
-]
 export function NotificationsDrawer({open,onClose}:{open:boolean;onClose:()=>void}){
- return <Drawer title="通知中心" width={420} open={open} onClose={onClose} extra={<span className="text-xs text-[#7f899b]">全部已读</span>}><List dataSource={notices} renderItem={item=><List.Item className="!items-start"><List.Item.Meta avatar={<span className="notice-dot"/>} title={<div className="flex justify-between gap-4"><b>{item.title}</b><small className="font-normal text-[#717b8d]">{item.time}</small></div>} description={<><p className="mb-2 mt-1 text-[#9ba4b5]">{item.content}</p><Tag bordered={false}>{item.type}</Tag></>}/></List.Item>}/></Drawer>
+ const [items,setItems]=useState<Announcement[]>([]),[loading,setLoading]=useState(false)
+ useEffect(()=>{if(!open)return;setLoading(true);apiClient.notifications.list({page:1,page_size:50}).then(result=>setItems(result.list)).catch(error=>console.error('加载通知失败:',error)).finally(()=>setLoading(false))},[open])
+ return <Drawer title="通知中心" width={420} open={open} onClose={onClose}>{loading?<div className="grid min-h-40 place-items-center"><Spin/></div>:items.length?<List dataSource={items} renderItem={item=><List.Item className="!items-start"><List.Item.Meta avatar={<span className="notice-dot"/>} title={<div className="flex justify-between gap-4"><b>{item.title}</b><small className="font-normal text-[#717b8d]">{new Date(item.published_at||item.created_at).toLocaleString('zh-CN')}</small></div>} description={<><p className="mb-2 mt-1 whitespace-pre-wrap text-[#9ba4b5]">{item.content}</p><Tag bordered={false}>{item.category==='activity'?'活动':item.category==='product'?'产品':'系统'}</Tag></>}/></List.Item>}/>:<Empty description="暂无通知" image={Empty.PRESENTED_IMAGE_SIMPLE}/>}</Drawer>
 }

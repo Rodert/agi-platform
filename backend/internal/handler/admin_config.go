@@ -61,6 +61,14 @@ type taskConfigRequest struct {
 	PromptMaxLength  int `json:"prompt_max_length"`
 	MaxRetryAttempts int `json:"max_retry_attempts"`
 }
+type promptOptimizationConfigRequest struct {
+	IsActive           bool   `json:"is_active"`
+	ModelName          string `json:"model_name"`
+	SystemPrompt       string `json:"system_prompt"`
+	MaxInputLength     int    `json:"max_input_length"`
+	CreditCost         int    `json:"credit_cost"`
+	RateLimitPerMinute int    `json:"rate_limit_per_minute"`
+}
 type resourcePolicyRequest struct {
 	KeyPrefix     string `json:"key_prefix"`
 	RetentionDays int    `json:"retention_days"`
@@ -151,6 +159,27 @@ func (h *AdminConfigHandler) SaveTaskConfig(c *gin.Context) {
 	}
 	v := &model.TaskConfig{MaxActiveTasks: r.MaxActiveTasks, PromptMaxLength: r.PromptMaxLength, MaxRetryAttempts: r.MaxRetryAttempts}
 	if e := h.configRepo.UpdateTaskConfig(v); e != nil {
+		response.Error(c, e)
+		return
+	}
+	response.Success(c, v)
+}
+func (h *AdminConfigHandler) GetPromptOptimizationConfig(c *gin.Context) {
+	v, e := h.configRepo.GetPromptOptimizationConfig()
+	if e != nil {
+		response.Error(c, e)
+		return
+	}
+	response.Success(c, v)
+}
+func (h *AdminConfigHandler) SavePromptOptimizationConfig(c *gin.Context) {
+	var r promptOptimizationConfigRequest
+	if c.ShouldBindJSON(&r) != nil || r.MaxInputLength < 1 || r.MaxInputLength > 50000 || r.CreditCost < 0 || r.CreditCost > 100000 || r.RateLimitPerMinute < 1 || r.RateLimitPerMinute > 120 || (r.IsActive && r.ModelName == "") {
+		response.Error(c, errors.New(errors.ErrCodeBadRequest, "提示词优化配置参数无效"))
+		return
+	}
+	v := &model.PromptOptimizationConfig{IsActive: r.IsActive, ModelName: r.ModelName, SystemPrompt: r.SystemPrompt, MaxInputLength: r.MaxInputLength, CreditCost: r.CreditCost, RateLimitPerMinute: r.RateLimitPerMinute}
+	if e := h.configRepo.UpdatePromptOptimizationConfig(v); e != nil {
 		response.Error(c, e)
 		return
 	}

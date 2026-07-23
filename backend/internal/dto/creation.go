@@ -10,11 +10,12 @@ type CreateImageTaskRequest struct {
 
 // CreateVideoTaskRequest 创建视频生成任务请求
 type CreateVideoTaskRequest struct {
-	Prompt        string                 `json:"prompt" binding:"required"`
-	ModelName     string                 `json:"model_name" binding:"required"`
-	Params        map[string]interface{} `json:"params"`
-	FirstFrameURL string                 `json:"first_frame_url"`
-	LastFrameURL  string                 `json:"last_frame_url"`
+	Prompt          string                 `json:"prompt" binding:"required"`
+	ModelName       string                 `json:"model_name" binding:"required"`
+	Params          map[string]interface{} `json:"params"`
+	FirstFrameURL   string                 `json:"first_frame_url"`
+	LastFrameURL    string                 `json:"last_frame_url"`
+	ReferenceImages []string               `json:"reference_images"`
 }
 
 // CreateProductTaskRequest 创建商品图生成任务请求
@@ -23,6 +24,19 @@ type CreateProductTaskRequest struct {
 	ModelName       string                 `json:"model_name" binding:"required"`
 	Params          map[string]interface{} `json:"params"`
 	ProductImageURL string                 `json:"product_image_url" binding:"required"`
+}
+
+type PromptOptimizationRequest struct {
+	Prompt          string                 `json:"prompt" binding:"required"`
+	TargetType      string                 `json:"target_type" binding:"required,oneof=image video"`
+	TargetModelName string                 `json:"target_model_name"`
+	Params          map[string]interface{} `json:"params"`
+}
+
+type PromptOptimizationResponse struct {
+	Prompt     string `json:"prompt"`
+	ModelName  string `json:"model_name"`
+	CreditCost int    `json:"credit_cost"`
 }
 
 // TaskResponse 任务响应

@@ -18,7 +18,7 @@
             </div>
             <el-table :data="row.channel_models || []" size="small" empty-text="尚未识别到模型">
               <el-table-column label="模型名" min-width="180"><template #default="{ row: binding }"><code>{{ binding.model?.name }}</code><span class="display-name">{{ binding.model?.display_name }}</span></template></el-table-column>
-              <el-table-column label="类型" width="90"><template #default="{ row: binding }"><el-tag>{{ binding.model?.type === 'video' ? '视频' : '图片' }}</el-tag></template></el-table-column>
+              <el-table-column label="类型" width="90"><template #default="{ row: binding }"><el-tag>{{ ({ image: '图片', video: '视频', text: '文本' })[binding.model?.type] || binding.model?.type }}</el-tag></template></el-table-column>
               <el-table-column label="能力" min-width="230"><template #default="{ row: binding }">{{ capabilitySummary(binding.model) }}</template></el-table-column>
               <el-table-column label="启用" width="85"><template #default="{ row: binding }"><el-switch :model-value="binding.is_active" @change="value => setBindingStatus(row, binding, value)"/></template></el-table-column>
               <el-table-column label="操作" width="100"><template #default="{ row: binding }"><el-button link type="primary" @click="openModel(binding.model)">配置能力</el-button></template></el-table-column>
@@ -38,9 +38,10 @@
     <el-dialog v-model="channelDialog" :title="channelForm.id ? '编辑渠道' : '添加渠道'" width="600px">
       <el-form :model="channelForm" label-width="100px">
         <el-form-item label="渠道账号"><el-input v-model="channelForm.name" placeholder="例如 ChatGPT 主账号"/></el-form-item>
-        <el-form-item label="渠道"><el-select v-model="channelForm.provider" class="full"><el-option v-for="item in providers" :key="item" :value="item" :label="item"/></el-select></el-form-item>
+        <el-form-item label="渠道"><el-select v-model="channelForm.provider" class="full" @change="ensureGrokConfig"><el-option v-for="item in providers" :key="item" :value="item" :label="item"/></el-select></el-form-item>
         <el-form-item label="API 地址"><el-input v-model="channelForm.api_url"/></el-form-item>
         <el-form-item label="API Key"><el-input v-model="channelForm.api_key" type="password" show-password :placeholder="channelForm.id ? '留空表示不修改' : '请输入 API Key'"/></el-form-item>
+        <template v-if="channelForm.provider === 'grok'"><el-divider>Grok 接口配置</el-divider><el-form-item label="模型列表路径"><el-input v-model="channelForm.extra_config.models_path" placeholder="/v1/models"/></el-form-item><el-form-item label="创建任务路径"><el-input v-model="channelForm.extra_config.create_path" placeholder="/v1/video/generations"/></el-form-item><el-form-item label="查询状态路径"><el-input v-model="channelForm.extra_config.status_path" placeholder="/v1/video/generations/{task_id}"/></el-form-item><el-form-item label="参考图字段"><el-input v-model="channelForm.extra_config.reference_field" placeholder="images"/></el-form-item><el-form-item label="轮询间隔"><el-input-number v-model="channelForm.extra_config.poll_interval_seconds" :min="1" :max="60"/><span class="hint">秒</span></el-form-item><el-form-item label="轮询超时"><el-input-number v-model="channelForm.extra_config.poll_timeout_seconds" :min="30" :max="3600"/><span class="hint">秒</span></el-form-item></template>
         <el-form-item label="优先级"><el-input-number v-model="channelForm.priority" :min="1" :max="9999"/><span class="hint">数字越小越优先</span></el-form-item>
         <el-form-item label="启用"><el-switch v-model="channelForm.is_active"/></el-form-item>
       </el-form>
@@ -50,7 +51,7 @@
     <el-dialog v-model="bindDialog" title="绑定模型" width="500px">
       <el-form :model="bindForm" label-width="95px">
         <el-form-item label="模型名"><el-input v-model="bindForm.model_name" placeholder="例如 gpt-image-2"/></el-form-item>
-        <el-form-item label="类型"><el-radio-group v-model="bindForm.type"><el-radio value="image">图片</el-radio><el-radio value="video">视频</el-radio></el-radio-group></el-form-item>
+        <el-form-item label="类型"><el-radio-group v-model="bindForm.type"><el-radio value="image">图片</el-radio><el-radio value="video">视频</el-radio><el-radio value="text">文本</el-radio></el-radio-group></el-form-item>
       </el-form>
       <template #footer><el-button @click="bindDialog = false">取消</el-button><el-button type="primary" @click="bindModel">绑定</el-button></template>
     </el-dialog>
@@ -84,7 +85,7 @@ const channels = ref([])
 const channelDialog = ref(false)
 const bindDialog = ref(false)
 const modelDialog = ref(false)
-const providers = ['openai', 'chatgpt', 'gemini', 'jimeng', 'wave', 'demo']
+const providers = ['openai', 'chatgpt', 'gemini', 'grok', 'jimeng', 'wave', 'demo']
 const emptyChannel = () => ({ id: 0, name: '', provider: 'openai', api_url: '', api_key: '', is_active: true, priority: 100, extra_config: {} })
 const channelForm = reactive(emptyChannel())
 const bindForm = reactive({ channel_id: 0, model_name: '', type: 'image' })
@@ -103,7 +104,8 @@ const makeSelect = (label, rows) => { const options = rows.filter(item => item.v
 const addOption = options => options.push({ value: '', extra_cost: 0 })
 const removeOption = (options, index) => options.splice(index, 1)
 
-function openChannel(row) { Object.assign(channelForm, emptyChannel(), row || {}, { api_key: '' }); channelDialog.value = true }
+function ensureGrokConfig() { if (!channelForm.extra_config || typeof channelForm.extra_config !== 'object') channelForm.extra_config = {}; if (channelForm.provider === 'grok') Object.assign(channelForm.extra_config, { models_path: channelForm.extra_config.models_path || '/v1/models', create_path: channelForm.extra_config.create_path || '/v1/video/generations', status_path: channelForm.extra_config.status_path || '/v1/video/generations/{task_id}', reference_field: channelForm.extra_config.reference_field || 'images', poll_interval_seconds: channelForm.extra_config.poll_interval_seconds || 5, poll_timeout_seconds: channelForm.extra_config.poll_timeout_seconds || 900 }) }
+function openChannel(row) { Object.assign(channelForm, emptyChannel(), row || {}, { api_key: '' }); ensureGrokConfig(); channelDialog.value = true }
 async function saveChannel() { const body = { ...channelForm }; delete body.id; if (channelForm.id) await request.put(`/channels/${channelForm.id}`, body); else await request.post('/channels', body); channelDialog.value = false; ElMessage.success('渠道已保存'); await load() }
 async function removeChannel(row) { await ElMessageBox.confirm(`删除“${row.name}”？该渠道的模型绑定会同时删除。`, '删除渠道', { type: 'warning' }); await request.delete(`/channels/${row.id}`); ElMessage.success('渠道已删除'); await load() }
 async function syncModels(row) { syncing.value = row.id; try { const result = await request.post(`/channels/${row.id}/sync-models`); ElMessage.success(`已同步 ${result.length} 个模型`); await load() } finally { syncing.value = 0 } }

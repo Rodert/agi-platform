@@ -35,6 +35,32 @@
         </el-form>
       </el-tab-pane>
 
+      <el-tab-pane label="提示词优化" name="prompt-optimization">
+        <el-form :model="promptOptimizationConfig" label-width="170px" class="config-form">
+          <el-form-item label="启用优化"><el-switch v-model="promptOptimizationConfig.is_active" /></el-form-item>
+          <el-form-item label="文本模型"><el-select v-model="promptOptimizationConfig.model_name" filterable class="wide" placeholder="先在账号管理中绑定文本模型"><el-option v-for="model in textModels" :key="model.name" :label="`${model.display_name} (${model.name})`" :value="model.name"/></el-select></el-form-item>
+          <el-form-item label="最大输入字符"><el-input-number v-model="promptOptimizationConfig.max_input_length" :min="1" :max="50000" /></el-form-item>
+          <el-form-item label="每次消耗灵感值"><el-input-number v-model="promptOptimizationConfig.credit_cost" :min="0" :max="100000" /></el-form-item>
+          <el-form-item label="每用户每分钟次数"><el-input-number v-model="promptOptimizationConfig.rate_limit_per_minute" :min="1" :max="120" /></el-form-item>
+          <el-form-item label="系统提示词"><el-input v-model="promptOptimizationConfig.system_prompt" type="textarea" :rows="8" /></el-form-item>
+          <el-form-item><el-button type="primary" :loading="saving" @click="savePromptOptimizationConfig">保存</el-button></el-form-item>
+        </el-form>
+        <el-divider>优化记录</el-divider>
+        <el-table :data="promptOptimizationLogs" max-height="380">
+          <el-table-column label="用户" min-width="130"><template #default="{ row }">{{ row.user?.name || '-' }}<div class="subtle">{{ row.user?.email }}</div></template></el-table-column>
+          <el-table-column prop="target_type" label="目标" width="90"><template #default="{ row }">{{ row.target_type === 'video' ? '视频' : '图片' }}</template></el-table-column>
+          <el-table-column prop="model_name" label="文本模型" min-width="130"/>
+          <el-table-column label="渠道" min-width="110"><template #default="{ row }">{{ row.channel?.name || '-' }}</template></el-table-column>
+          <el-table-column prop="original_prompt" label="原提示词" min-width="200" show-overflow-tooltip/>
+          <el-table-column prop="optimized_prompt" label="优化结果" min-width="240" show-overflow-tooltip/>
+          <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'success' ? 'success' : row.status === 'failed' ? 'danger' : 'warning'">{{ ({ success: '成功', failed: '失败', processing: '处理中' })[row.status] || row.status }}</el-tag></template></el-table-column>
+          <el-table-column label="耗时" width="80"><template #default="{ row }">{{ row.latency_ms }}ms</template></el-table-column>
+          <el-table-column label="消耗" width="70"><template #default="{ row }">{{ row.credit_cost }}</template></el-table-column>
+          <el-table-column label="时间" width="170"><template #default="{ row }">{{ new Date(row.created_at).toLocaleString('zh-CN') }}</template></el-table-column>
+        </el-table>
+        <el-pagination v-if="promptOptimizationLogTotal" class="mt" background layout="prev, pager, next" :current-page="promptOptimizationLogPage" :page-size="20" :total="promptOptimizationLogTotal" @current-change="loadPromptOptimizationLogs"/>
+      </el-tab-pane>
+
       <el-tab-pane label="存储配置" name="storage">
         <el-button type="primary" class="mb" @click="addStorage">添加存储配置</el-button>
         <el-table :data="storageList">
@@ -63,23 +89,27 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
-const activeTab=ref('basic'),loading=ref(false),saving=ref(false),storageList=ref([]),storageDialog=ref(false),resourcePolicies=ref([]),resourcePolicyDialog=ref(false)
+const activeTab=ref('basic'),loading=ref(false),saving=ref(false),storageList=ref([]),storageDialog=ref(false),resourcePolicies=ref([]),resourcePolicyDialog=ref(false),allModels=ref([]),promptOptimizationLogs=ref([]),promptOptimizationLogTotal=ref(0),promptOptimizationLogPage=ref(1)
 const basicConfig=reactive({site_name:'',site_desc:'',register_enabled:true,register_credits:0})
 const emailConfig=reactive({smtp_host:'',smtp_port:587,smtp_user:'',smtp_password:'',smtp_ssl:false,from_name:'',from_email:'',is_active:false})
 const taskConfig=reactive({max_active_tasks:50,prompt_max_length:5000,max_retry_attempts:0})
+const promptOptimizationConfig=reactive({is_active:false,model_name:'',system_prompt:'',max_input_length:5000,credit_cost:0,rate_limit_per_minute:5})
+const textModels=computed(()=>allModels.value.filter(model=>model.type==='text'))
 const emptyStorage=()=>({id:0,name:'',type:'local',local_path:'./uploads',endpoint:'',access_key:'',secret_key:'',bucket:'',region:'',domain:''})
 const storageForm=reactive(emptyStorage())
 const resourcePolicyForm=reactive({resource_type:'',key_prefix:'',retention_days:0,is_public:true,cache_max_age:86400,max_size_mb:20})
 const bool=v=>v===true||v==='true'
 
-async function loadAll(){loading.value=true;try{const [basic,email,task,storage,policies]=await Promise.all([request.get('/config/basic'),request.get('/config/email'),request.get('/config/task'),request.get('/config/storage'),request.get('/config/storage/policies')]);Object.assign(basicConfig,{site_name:basic.site_name||'AGI Platform',site_desc:basic.site_desc||'',register_enabled:bool(basic.register_enabled),register_credits:Number(basic.new_user_gift_amount||0)});Object.assign(emailConfig,email,{smtp_password:''});Object.assign(taskConfig,task);storageList.value=storage||[];resourcePolicies.value=policies||[]}finally{loading.value=false}}
+async function loadAll(){loading.value=true;try{const [basic,email,task,promptOptimization,storage,policies,models]=await Promise.all([request.get('/config/basic'),request.get('/config/email'),request.get('/config/task'),request.get('/config/prompt-optimization'),request.get('/config/storage'),request.get('/config/storage/policies'),request.get('/config/models')]);Object.assign(basicConfig,{site_name:basic.site_name||'AGI Platform',site_desc:basic.site_desc||'',register_enabled:bool(basic.register_enabled),register_credits:Number(basic.new_user_gift_amount||0)});Object.assign(emailConfig,email,{smtp_password:''});Object.assign(taskConfig,task);Object.assign(promptOptimizationConfig,promptOptimization);storageList.value=storage||[];resourcePolicies.value=policies||[];allModels.value=models||[];await loadPromptOptimizationLogs(1)}finally{loading.value=false}}
 async function saveBasicConfig(){saving.value=true;try{await request.put('/config/basic',basicConfig);ElMessage.success('基础配置已保存')}finally{saving.value=false}}
 async function saveEmailConfig(){saving.value=true;try{await request.put('/config/email',emailConfig);emailConfig.smtp_password='';ElMessage.success('邮件配置已保存')}finally{saving.value=false}}
 async function saveTaskConfig(){saving.value=true;try{await request.put('/config/task',taskConfig);ElMessage.success('任务配置已保存')}finally{saving.value=false}}
+async function savePromptOptimizationConfig(){saving.value=true;try{await request.put('/config/prompt-optimization',promptOptimizationConfig);ElMessage.success('提示词优化配置已保存')}finally{saving.value=false}}
+async function loadPromptOptimizationLogs(page=promptOptimizationLogPage.value){promptOptimizationLogPage.value=page;const result=await request.get('/config/prompt-optimization/logs',{params:{page,page_size:20}});promptOptimizationLogs.value=result.list||[];promptOptimizationLogTotal.value=result.total||0}
 async function testEmail(){const {value}=await ElMessageBox.prompt('请输入测试邮件接收地址','测试邮件',{inputPattern:/^[^\s@]+@[^\s@]+\.[^\s@]+$/,inputErrorMessage:'请输入有效邮箱'});await request.post('/config/email/test',{email:value});ElMessage.success('测试邮件已发送')}
 function addStorage(){Object.assign(storageForm,emptyStorage());storageDialog.value=true}
 function editStorage(row){Object.assign(storageForm,emptyStorage(),row,{access_key:'',secret_key:''});storageDialog.value=true}
@@ -93,4 +123,4 @@ async function saveResourcePolicy(){await request.put(`/config/storage/policies/
 onMounted(loadAll)
 </script>
 
-<style scoped>.config-management{padding:20px}.config-form{max-width:680px}.mb{margin-bottom:20px}h2{margin-bottom:20px}.field-tip{margin-left:10px;color:#909399;font-size:12px}</style>
+<style scoped>.config-management{padding:20px}.config-form{max-width:760px}.mb{margin-bottom:20px}.mt{margin-top:16px}h2{margin-bottom:20px}.field-tip,.subtle{margin-left:10px;color:#909399;font-size:12px}.subtle{margin-left:0}.wide{width:100%}</style>

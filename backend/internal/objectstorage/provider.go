@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/javapub/agi-platform-backend/internal/model"
 )
@@ -47,4 +48,8 @@ func (p *localProvider) Download(_ context.Context, key string) (io.ReadCloser, 
 		basePath = "./uploads"
 	}
 	return os.Open(filepath.Join(basePath, filepath.FromSlash(key)))
+}
+
+func (p *localProvider) PresignGet(_ context.Context, _ string, _ time.Duration) (string, error) {
+	return "", fmt.Errorf("本地私有存储不支持向上游提供临时读取地址")
 }

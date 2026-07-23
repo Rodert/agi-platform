@@ -290,7 +290,11 @@ func (s *AdminService) GetTaskList(req *dto.AdminTaskListRequest) ([]*dto.AdminT
 		if task.Request != nil && len(task.Request.Params) > 0 {
 			_ = json.Unmarshal(task.Request.Params, &params)
 		}
-		item := &dto.AdminTaskResponse{ID: task.ID, UserID: task.UserID, ModelName: task.ModelName, Type: task.Type, Status: task.Status, Progress: task.Progress, Prompt: task.Prompt, Params: params, Cost: task.Cost, ResultURL: task.ResultURL, ThumbnailURL: task.ThumbnailURL, ErrorMsg: task.ErrorMsg, AttemptCount: task.AttemptCount, MaxRetryAttempts: task.MaxRetryAttempts, CreatedAt: task.CreatedAt.Format("2006-01-02 15:04:05")}
+		providerResponse := map[string]interface{}{}
+		if len(task.ProviderResponse) > 0 {
+			_ = json.Unmarshal(task.ProviderResponse, &providerResponse)
+		}
+		item := &dto.AdminTaskResponse{ID: task.ID, UserID: task.UserID, ProviderTaskID: task.ProviderTaskID, ProviderStatus: task.ProviderStatus, ProviderResponse: providerResponse, ModelName: task.ModelName, Type: task.Type, Status: task.Status, Progress: task.Progress, Prompt: task.Prompt, Params: params, Cost: task.Cost, ResultURL: task.ResultURL, ThumbnailURL: task.ThumbnailURL, ErrorMsg: task.ErrorMsg, AttemptCount: task.AttemptCount, MaxRetryAttempts: task.MaxRetryAttempts, CreatedAt: task.CreatedAt.Format("2006-01-02 15:04:05")}
 		if task.User != nil {
 			item.UserName, item.UserEmail = task.User.Name, task.User.Email
 		}
@@ -302,6 +306,9 @@ func (s *AdminService) GetTaskList(req *dto.AdminTaskListRequest) ([]*dto.AdminT
 		}
 		if task.LastRetryAt != nil {
 			item.LastRetryAt = task.LastRetryAt.Format("2006-01-02 15:04:05")
+		}
+		if task.LastPolledAt != nil {
+			item.LastPolledAt = task.LastPolledAt.Format("2006-01-02 15:04:05")
 		}
 		for _, attempt := range task.Attempts {
 			entry := dto.AdminTaskAttemptResponse{Attempt: attempt.Attempt, Status: attempt.Status, ErrorMsg: attempt.ErrorMsg, StartedAt: attempt.StartedAt.Format("2006-01-02 15:04:05")}

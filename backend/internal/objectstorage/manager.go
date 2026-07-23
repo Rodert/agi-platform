@@ -41,12 +41,61 @@ type uploadInput struct {
 type provider interface {
 	Upload(context.Context, uploadInput) error
 	Download(context.Context, string) (io.ReadCloser, error)
+	PresignGet(context.Context, string, time.Duration) (string, error)
+}
+
+// TemporaryReadURL grants an upstream provider a short-lived GET URL for a
+// private object. Public resource policies keep using their stable public URL.
+func (m *Manager) TemporaryReadURL(ctx context.Context, stored *StoredObject, ttl time.Duration) (string, error) {
+	if stored == nil || stored.StorageConfigID == 0 || stored.ObjectKey == "" {
+		return "", fmt.Errorf("参考资源信息不完整")
+	}
+	policy, err := m.policyRepo.FindByType(stored.ResourceType)
+	if err != nil {
+		return "", err
+	}
+	if policy.IsPublic {
+		if stored.PublicURL == "" {
+			return "", fmt.Errorf("公开参考资源缺少访问地址")
+		}
+		return stored.PublicURL, nil
+	}
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+	config, err := m.configRepo.FindByID(stored.StorageConfigID)
+	if err != nil {
+		return "", err
+	}
+	provider, err := newProvider(config)
+	if err != nil {
+		return "", err
+	}
+	return provider.PresignGet(ctx, stored.ObjectKey, ttl)
 }
 
 type Manager struct {
 	configRepo *repository.StorageConfigRepository
 	policyRepo *repository.ResourcePolicyRepository
 	httpClient *http.Client
+}
+
+// Download opens an existing object through the storage configuration that
+// originally stored it. This keeps task downloads independent from the
+// currently active storage configuration.
+func (m *Manager) Download(ctx context.Context, asset *model.MediaAsset) (io.ReadCloser, error) {
+	if asset == nil || asset.StorageConfigID == 0 || asset.ObjectKey == "" {
+		return nil, fmt.Errorf("下载资源信息不完整")
+	}
+	config, err := m.configRepo.FindByID(asset.StorageConfigID)
+	if err != nil {
+		return nil, err
+	}
+	provider, err := newProvider(config)
+	if err != nil {
+		return nil, err
+	}
+	return provider.Download(ctx, asset.ObjectKey)
 }
 
 func NewManager(configRepo *repository.StorageConfigRepository, policyRepo *repository.ResourcePolicyRepository) *Manager {

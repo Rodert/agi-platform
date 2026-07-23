@@ -20,6 +20,7 @@ func init() {
 	Register("openai", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
 	Register("chatgpt", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
 	Register("jimeng", func(config map[string]interface{}) (Adapter, error) { return NewJimengAdapter(config), nil })
+	Register("grok", func(config map[string]interface{}) (Adapter, error) { return NewGrokAdapter(config), nil })
 	Register("demo", func(config map[string]interface{}) (Adapter, error) { return NewDemoAdapter(), nil })
 }
 
@@ -37,7 +38,9 @@ func GetAdapter(aiModel *model.AIModel, channel *model.AIProviderAccount) (Adapt
 		if len(channel.ExtraConfig) > 0 {
 			var extra map[string]interface{}
 			if json.Unmarshal(channel.ExtraConfig, &extra) == nil {
-				for key, value := range extra { apiConfig[key] = value }
+				for key, value := range extra {
+					apiConfig[key] = value
+				}
 			}
 		}
 	}
@@ -48,7 +51,9 @@ func GetAdapter(aiModel *model.AIModel, channel *model.AIProviderAccount) (Adapt
 		provider = channel.Provider
 	}
 	factory, ok := factories[provider]
-	if !ok { return nil, fmt.Errorf("不支持的提供商: %s", provider) }
+	if !ok {
+		return nil, fmt.Errorf("不支持的提供商: %s", provider)
+	}
 	return factory(apiConfig)
 }
 
@@ -61,6 +66,8 @@ func DiscoverModels(ctx context.Context, channel *model.AIProviderAccount) ([]Di
 		return discoverOpenAIModels(ctx, channel)
 	case "gemini":
 		return discoverGeminiModels(ctx, channel)
+	case "grok":
+		return discoverGrokModels(ctx, channel)
 	case "demo":
 		return []DiscoveredModel{{Name: "demo-image", Type: "image"}}, nil
 	default:
@@ -75,11 +82,21 @@ func discoverOpenAIModels(ctx context.Context, channel *model.AIProviderAccount)
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+channel.APIKey)
-	var payload struct { Data []struct { ID string `json:"id"` } `json:"data"` }
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
 	if err := doJSON(req, &payload); err != nil {
 		return nil, err
 	}
-	return normalizeDiscoveredModels(func() []string { ids := make([]string, 0, len(payload.Data)); for _, item := range payload.Data { ids = append(ids, item.ID) }; return ids }()), nil
+	return normalizeDiscoveredModels(func() []string {
+		ids := make([]string, 0, len(payload.Data))
+		for _, item := range payload.Data {
+			ids = append(ids, item.ID)
+		}
+		return ids
+	}()), nil
 }
 
 func discoverGeminiModels(ctx context.Context, channel *model.AIProviderAccount) ([]DiscoveredModel, error) {
@@ -95,28 +112,44 @@ func discoverGeminiModels(ctx context.Context, channel *model.AIProviderAccount)
 	if err != nil {
 		return nil, err
 	}
-	var payload struct { Models []struct { Name string `json:"name"` } `json:"models"` }
+	var payload struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
 	if err := doJSON(req, &payload); err != nil {
 		return nil, err
 	}
 	ids := make([]string, 0, len(payload.Models))
-	for _, item := range payload.Models { ids = append(ids, strings.TrimPrefix(item.Name, "models/")) }
+	for _, item := range payload.Models {
+		ids = append(ids, strings.TrimPrefix(item.Name, "models/"))
+	}
 	return normalizeDiscoveredModels(ids), nil
 }
 
 func modelListEndpoint(rawURL, suffix string) string {
 	base := strings.TrimRight(rawURL, "/")
-	if strings.HasSuffix(base, "/v1") { base = strings.TrimSuffix(base, "/v1") }
-	if strings.HasSuffix(base, "/v1beta") { base = strings.TrimSuffix(base, "/v1beta") }
-	if index := strings.Index(base, "/v1/"); index >= 0 { base = base[:index] }
-	if index := strings.Index(base, "/v1beta/"); index >= 0 { base = base[:index] }
+	if strings.HasSuffix(base, "/v1") {
+		base = strings.TrimSuffix(base, "/v1")
+	}
+	if strings.HasSuffix(base, "/v1beta") {
+		base = strings.TrimSuffix(base, "/v1beta")
+	}
+	if index := strings.Index(base, "/v1/"); index >= 0 {
+		base = base[:index]
+	}
+	if index := strings.Index(base, "/v1beta/"); index >= 0 {
+		base = base[:index]
+	}
 	return base + suffix
 }
 
 func doJSON(req *http.Request, target interface{}) error {
 	client := &http.Client{Timeout: 15 * time.Second}
 	response, err := client.Do(req)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return fmt.Errorf("模型发现请求失败: %s", response.Status)
@@ -129,9 +162,13 @@ func normalizeDiscoveredModels(names []string) []DiscoveredModel {
 	seen := map[string]bool{}
 	for _, name := range names {
 		name = strings.TrimSpace(name)
-		if name == "" || seen[name] { continue }
+		if name == "" || seen[name] {
+			continue
+		}
 		modelType := discoveredType(name)
-		if modelType == "" { continue }
+		if modelType == "" {
+			continue
+		}
 		seen[name] = true
 		models = append(models, DiscoveredModel{Name: name, Type: modelType})
 	}
@@ -140,8 +177,15 @@ func normalizeDiscoveredModels(names []string) []DiscoveredModel {
 
 func discoveredType(name string) string {
 	name = strings.ToLower(name)
-	if strings.Contains(name, "image") || strings.Contains(name, "dall-e") || strings.Contains(name, "seedream") || strings.Contains(name, "flux") { return "image" }
-	if strings.Contains(name, "video") || strings.Contains(name, "sora") || strings.Contains(name, "veo") || strings.Contains(name, "kling") || strings.Contains(name, "runway") { return "video" }
+	if strings.Contains(name, "image") || strings.Contains(name, "dall-e") || strings.Contains(name, "seedream") || strings.Contains(name, "flux") {
+		return "image"
+	}
+	if strings.Contains(name, "video") || strings.Contains(name, "sora") || strings.Contains(name, "veo") || strings.Contains(name, "kling") || strings.Contains(name, "runway") {
+		return "video"
+	}
+	if strings.Contains(name, "gpt") || strings.Contains(name, "gemini") || strings.Contains(name, "claude") || strings.Contains(name, "deepseek") || strings.Contains(name, "qwen") || strings.Contains(name, "glm") || strings.Contains(name, "grok") {
+		return "text"
+	}
 	return ""
 }
 

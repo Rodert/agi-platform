@@ -66,12 +66,17 @@ func MD5(str string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// TruncateString 截断字符串
+// TruncateString truncates by Unicode characters so the result is always valid UTF-8.
 func TruncateString(str string, length int) string {
-	if len(str) <= length {
+	if length <= 0 {
+		return ""
+	}
+
+	chars := []rune(str)
+	if len(chars) <= length {
 		return str
 	}
-	return str[:length]
+	return string(chars[:length])
 }
 
 // Contains 检查字符串是否在切片中

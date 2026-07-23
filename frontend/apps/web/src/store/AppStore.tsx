@@ -8,6 +8,8 @@ interface CreateTaskInput {
   modelName: string
   type: Task['type']
   params?: Record<string, unknown>
+  referenceImage?: string
+  referenceImages?: string[]
   firstFrameUrl?: string
   lastFrameUrl?: string
 }
@@ -20,8 +22,6 @@ interface Store {
   tasks: Task[]
   models: AIModel[]
   ledger: Ledger[]
-  notifications: number
-  markNotificationsRead: () => void
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
   requireAuth: () => boolean
@@ -44,7 +44,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [works, setWorks] = useState<Work[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [models, setModels] = useState<AIModel[]>([])
-  const [notifications, setNotifications] = useState(0)
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -86,6 +85,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     void initialize()
   }, [loadTasks, loadUserProfile, loadWorks])
+
+  useEffect(() => {
+    if (!user || !tasks.some(task => ['queued', 'processing', 'uploading'].includes(task.status))) return
+    const timer = window.setInterval(() => { void loadTasks() }, 3000)
+    return () => window.clearInterval(timer)
+  }, [loadTasks, tasks, user])
 
   const login = async (email: string, password: string) => {
     try {
@@ -150,12 +155,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!requireAuth()) return false
     try {
       if (input.type === 'image') {
-        await apiClient.generation.createImage({ prompt: input.prompt, model_name: input.modelName, params: input.params })
+        await apiClient.generation.createImage({ prompt: input.prompt, model_name: input.modelName, params: input.params, reference_image: input.referenceImage })
       } else {
         await apiClient.generation.createVideo({
           prompt: input.prompt,
           model_name: input.modelName,
           params: input.params,
+          reference_images: input.referenceImages,
           first_frame_url: input.firstFrameUrl,
           last_frame_url: input.lastFrameUrl,
         })
@@ -176,8 +182,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     tasks,
     models,
     ledger: [],
-    notifications,
-    markNotificationsRead: () => setNotifications(0),
     login,
     logout,
     requireAuth,
@@ -190,7 +194,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     redeem: () => false,
     loadTasks,
     loadWorks,
-  }), [authReady, loadTasks, loadWorks, models, notifications, tasks, user, works])
+  }), [authReady, loadTasks, loadWorks, models, tasks, user, works])
 
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

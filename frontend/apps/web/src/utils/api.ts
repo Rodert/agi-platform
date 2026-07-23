@@ -1,4 +1,4 @@
-import type { User, Work, Task, AIModel, PageResponse } from '../types'
+import type { User, Work, Task, AIModel, Announcement, PageResponse } from '../types'
 
 // API配置
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -136,9 +136,21 @@ class APIClient {
       params?: Record<string, any>
       first_frame_url?: string
       last_frame_url?: string
+      reference_images?: string[]
     }) =>
       this.request<Task>(
         '/api/v1/generation/video',
+        { method: 'POST', body: JSON.stringify(data) }
+      ),
+
+    optimizePrompt: (data: {
+      prompt: string
+      target_type: 'image' | 'video'
+      target_model_name?: string
+      params?: Record<string, any>
+    }) =>
+      this.request<{ prompt: string; model_name: string; credit_cost: number }>(
+        '/api/v1/generation/prompt-optimization',
         { method: 'POST', body: JSON.stringify(data) }
       ),
 
@@ -172,6 +184,36 @@ class APIClient {
     // 获取任务详情
     get: (id: number) =>
       this.request<Task>(`/api/v1/tasks/${id}`),
+
+    // 下载任务结果，使用受鉴权保护的流式接口，兼容私有对象存储。
+    download: async (id: number) => {
+      const response = await fetch(`${this.baseURL}/api/v1/tasks/${id}/download`, {
+        headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => null) as ApiResponse<unknown> | null
+        throw new Error(data?.error?.message || data?.message || '下载失败')
+      }
+      const blob = await response.blob()
+      const filename = response.headers.get('content-disposition')?.match(/filename=([^;]+)/i)?.[1] || `agi-task-${id}`
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    },
+  }
+
+  notifications = {
+    list: (params: { page?: number; page_size?: number } = {}) => {
+      const query = new URLSearchParams()
+      if (params.page) query.set('page', String(params.page))
+      if (params.page_size) query.set('page_size', String(params.page_size))
+      return this.request<PageResponse<Announcement>>(`/api/v1/announcements?${query.toString()}`)
+    },
   }
 
   // 作品API

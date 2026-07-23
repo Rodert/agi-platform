@@ -109,6 +109,15 @@ export interface Ledger {
   created_at: string
 }
 
+export interface Announcement {
+  id: number
+  title: string
+  content: string
+  category: string
+  published_at?: string
+  created_at: string
+}
+
 // 分页响应
 export interface PageResponse<T> {
   list: T[]

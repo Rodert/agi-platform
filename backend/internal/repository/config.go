@@ -86,6 +86,24 @@ func (r *ConfigRepository) UpdateTaskConfig(config *model.TaskConfig) error {
 	return r.db.Save(config).Error
 }
 
+func (r *ConfigRepository) GetPromptOptimizationConfig() (*model.PromptOptimizationConfig, error) {
+	config := &model.PromptOptimizationConfig{}
+	err := r.db.First(config, 1).Error
+	if err == gorm.ErrRecordNotFound {
+		return &model.PromptOptimizationConfig{ID: 1, MaxInputLength: 5000, RateLimitPerMinute: 5}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return config, nil
+}
+
+func (r *ConfigRepository) UpdatePromptOptimizationConfig(config *model.PromptOptimizationConfig) error {
+	config.ID = 1
+	config.UpdatedAt = time.Now()
+	return r.db.Save(config).Error
+}
+
 // GetCategories 获取分类列表
 func (r *ConfigRepository) GetCategories(categoryType string) ([]*model.Category, error) {
 	var categories []*model.Category

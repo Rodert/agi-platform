@@ -28,8 +28,8 @@ func (s *ResourcePolicyService) Update(resourceType string, input *model.Resourc
 	if input.KeyPrefix == "" || input.RetentionDays < 0 || input.CacheMaxAge < 0 || input.MaxSizeMB < 1 {
 		return nil, errors.New(errors.ErrCodeBadRequest, "资源策略参数无效")
 	}
-	if resourceType != "reference" && !input.IsPublic {
-		return nil, errors.New(errors.ErrCodeBadRequest, "当前图片、视频和缩略图必须开启公开访问")
+	if !input.IsPublic {
+		return nil, errors.New(errors.ErrCodeBadRequest, "当前资源类型必须开启公开访问")
 	}
 	policy.KeyPrefix, policy.RetentionDays, policy.IsPublic, policy.CacheMaxAge, policy.MaxSizeMB = input.KeyPrefix, input.RetentionDays, input.IsPublic, input.CacheMaxAge, input.MaxSizeMB
 	if err := s.repo.Update(policy); err != nil {

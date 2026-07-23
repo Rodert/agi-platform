@@ -15,7 +15,7 @@ INSERT INTO `resource_policies` (`resource_type`,`key_prefix`,`retention_days`,`
 ('image', 'images/', 0, 1, 86400, 20),
 ('video', 'videos/', 30, 1, 86400, 1024),
 ('thumbnail', 'thumbnails/', 30, 1, 86400, 10),
-('reference', 'references/', 30, 0, 0, 5)
+('reference', 'references/', 30, 1, 86400, 5)
 ON DUPLICATE KEY UPDATE `resource_type` = VALUES(`resource_type`);
 
 CREATE TABLE IF NOT EXISTS `media_assets` (

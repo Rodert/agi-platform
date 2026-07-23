@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/javapub/agi-platform-backend/internal/worker/adapter"
 	"github.com/javapub/agi-platform-backend/pkg/logger"
 	"go.uber.org/zap"
+	"gorm.io/datatypes"
 )
 
 // ImageProcessor 图片处理器
@@ -46,8 +48,14 @@ func (p *ImageProcessor) Process(ctx context.Context, msg *TaskMessage) error {
 		return fmt.Errorf("任务不存在: %w", err)
 	}
 
-	// 2. 创建本次执行的审计记录并更新任务状态。
-	attempt, err := p.taskRepo.StartAttempt(task)
+	// 2. A recovered upstream task must continue its original execution audit;
+	// it is polling, not a newly generated retry.
+	var attempt *model.TaskAttempt
+	if task.ProviderTaskID != "" {
+		attempt, err = p.taskRepo.FindOpenAttempt(task.ID)
+	} else {
+		attempt, err = p.taskRepo.StartAttempt(task)
+	}
 	if err != nil {
 		return err
 	}
@@ -86,12 +94,18 @@ func (p *ImageProcessor) Process(ctx context.Context, msg *TaskMessage) error {
 	// 7. 调用 AI API
 	logger.Info(fmt.Sprintf("🎨 调用 AI API: %s, Prompt: %s", aiModel.Name, msg.Prompt))
 
-	result, err := adp.Generate(ctx, &adapter.GenerateRequest{
+	request := &adapter.GenerateRequest{
 		ModelName: aiModel.Name,
 		Type:      task.Type,
 		Prompt:    msg.Prompt,
 		Params:    msg.Params,
-	})
+	}
+	var result *adapter.GenerateResponse
+	if async, ok := adp.(adapter.AsyncTaskAdapter); ok {
+		result, err = p.processAsyncTask(ctx, task, async, request)
+	} else {
+		result, err = adp.Generate(ctx, request)
+	}
 	if err != nil {
 		return p.failTask(task, attempt, fmt.Sprintf("AI 生成失败: %v", err))
 	}
@@ -182,11 +196,106 @@ func (p *ImageProcessor) failTask(task *model.Task, attempt *model.TaskAttempt, 
 	task.UpdatedAt = now
 	task.CompletedAt = &now
 	p.taskRepo.Update(task)
-	if err := p.taskRepo.CompleteAttempt(attempt, "failed", errorMsg); err != nil {
-		logger.Error("记录任务执行失败状态失败", zap.Error(err))
+	if attempt != nil {
+		if err := p.taskRepo.CompleteAttempt(attempt, "failed", errorMsg); err != nil {
+			logger.Error("记录任务执行失败状态失败", zap.Error(err))
+		}
 	}
 
 	return fmt.Errorf(errorMsg)
+}
+
+func (p *ImageProcessor) processAsyncTask(ctx context.Context, task *model.Task, adp adapter.AsyncTaskAdapter, request *adapter.GenerateRequest) (*adapter.GenerateResponse, error) {
+	interval, timeout := 5*time.Second, 15*time.Minute
+	if config, ok := adp.(adapter.PollingConfig); ok {
+		interval, timeout = config.PollInterval(), config.PollTimeout()
+	}
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	if timeout <= 0 {
+		timeout = 15 * time.Minute
+	}
+	pollCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if task.ProviderTaskID == "" {
+		state, err := adp.Submit(pollCtx, request)
+		if err != nil {
+			return nil, err
+		}
+		if state.ProviderTaskID == "" {
+			return nil, fmt.Errorf("上游未返回任务 ID")
+		}
+		if err := p.recordAsyncState(task, state, 35); err != nil {
+			return nil, err
+		}
+		if state.Status == "failed" {
+			return nil, asyncFailure(state)
+		}
+		if state.Status == "succeeded" {
+			return asyncResult(state)
+		}
+	}
+
+	for {
+		select {
+		case <-pollCtx.Done():
+			return nil, fmt.Errorf("上游任务轮询超时: %w", pollCtx.Err())
+		case <-time.After(interval):
+		}
+		state, err := adp.Poll(pollCtx, task.ProviderTaskID)
+		if err != nil {
+			return nil, fmt.Errorf("查询上游任务状态失败: %w", err)
+		}
+		if state.ProviderTaskID == "" {
+			state.ProviderTaskID = task.ProviderTaskID
+		}
+		progress := state.Progress
+		if progress <= 0 {
+			progress = 60
+		}
+		if progress >= 100 && state.Status != "succeeded" {
+			progress = 99
+		}
+		if err := p.recordAsyncState(task, state, progress); err != nil {
+			return nil, err
+		}
+		switch state.Status {
+		case "succeeded":
+			return asyncResult(state)
+		case "failed":
+			return nil, asyncFailure(state)
+		}
+	}
+}
+
+func (p *ImageProcessor) recordAsyncState(task *model.Task, state *adapter.AsyncTask, fallbackProgress int) error {
+	now := time.Now()
+	task.ProviderTaskID = state.ProviderTaskID
+	task.ProviderStatus = state.Status
+	if len(state.RawResponse) > 0 {
+		task.ProviderResponse = datatypes.JSON(append(json.RawMessage(nil), state.RawResponse...))
+	}
+	task.LastPolledAt = &now
+	task.Status = "processing"
+	task.Progress = fallbackProgress
+	task.UpdatedAt = now
+	return p.taskRepo.Update(task)
+}
+
+func asyncResult(state *adapter.AsyncTask) (*adapter.GenerateResponse, error) {
+	if state.Result == nil || state.Result.VideoURL == "" {
+		return nil, fmt.Errorf("上游任务已完成但未返回生成结果")
+	}
+	return state.Result, nil
+}
+
+func asyncFailure(state *adapter.AsyncTask) error {
+	if state.ErrorMessage == "" {
+		return fmt.Errorf("上游任务失败")
+	}
+	return fmt.Errorf("上游任务失败: %s", state.ErrorMessage)
 }
 
 func (p *ImageProcessor) MarkRetrying(taskID int64) error {

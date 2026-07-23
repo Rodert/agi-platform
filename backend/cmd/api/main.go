@@ -142,6 +142,8 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	storageConfigRepo := repository.NewStorageConfigRepository(database.DB)
 	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)
 	mediaAssetRepo := repository.NewMediaAssetRepository(database.DB)
+	announcementRepo := repository.NewAnnouncementRepository(database.DB)
+	promptOptimizationRepo := repository.NewPromptOptimizationRepository(database.DB)
 
 	// Queue
 	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
@@ -160,6 +162,8 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	storageConfigService := service.NewStorageConfigService(storageConfigRepo)
 	resourcePolicyService := service.NewResourcePolicyService(resourcePolicyRepo)
 	channelCatalogService := service.NewChannelCatalogService(providerAccountRepo, aiModelRepo, channelModelRepo)
+	announcementService := service.NewAnnouncementService(announcementRepo)
+	promptOptimizationService := service.NewPromptOptimizationService(configRepo, aiModelRepo, channelModelRepo, creditRepo, promptOptimizationRepo, database.DB)
 
 	// Handler
 	authHandler := handler.NewAuthHandler(authService)
@@ -168,13 +172,15 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	adminHandler := handler.NewAdminHandler(adminService)
 	workHandler := handler.NewWorkHandler(workService)
 	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, channelModelRepo, channelCatalogService, storageConfigService, resourcePolicyService, emailService)
+	announcementHandler := handler.NewAnnouncementHandler(announcementService)
+	promptOptimizationHandler := handler.NewPromptOptimizationHandler(promptOptimizationService)
 
 	// 注册路由
-	registerRoutes(router, cfg, authHandler, userHandler, creationHandler, adminHandler, workHandler, adminConfigHandler)
+	registerRoutes(router, cfg, authHandler, userHandler, creationHandler, adminHandler, workHandler, adminConfigHandler, announcementHandler, promptOptimizationHandler)
 }
 
 // registerRoutes 注册路由
-func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler.AuthHandler, userHandler *handler.UserHandler, creationHandler *handler.CreationHandler, adminHandler *handler.AdminHandler, workHandler *handler.WorkHandler, adminConfigHandler *handler.AdminConfigHandler) {
+func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler.AuthHandler, userHandler *handler.UserHandler, creationHandler *handler.CreationHandler, adminHandler *handler.AdminHandler, workHandler *handler.WorkHandler, adminConfigHandler *handler.AdminConfigHandler, announcementHandler *handler.AnnouncementHandler, promptOptimizationHandler *handler.PromptOptimizationHandler) {
 	// API 路由组
 	apiV1 := router.Group("/api/v1")
 	{
@@ -201,6 +207,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 
 		// 模型列表公开，创建任务需要登录。
 		apiV1.GET("/generation/models", creationHandler.GetModels)
+		apiV1.GET("/announcements", announcementHandler.ListPublished)
 
 		// 创作接口（需要登录）
 		generation := apiV1.Group("/generation")
@@ -208,6 +215,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		{
 			generation.POST("/image", creationHandler.CreateImageTask)
 			generation.POST("/video", creationHandler.CreateVideoTask)
+			generation.POST("/prompt-optimization", promptOptimizationHandler.Optimize)
 		}
 
 		// 任务接口（需要登录）
@@ -216,6 +224,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		{
 			tasks.GET("", creationHandler.GetTaskList)
 			tasks.GET("/:id", creationHandler.GetTask)
+			tasks.GET("/:id/download", creationHandler.DownloadTask)
 		}
 
 		// 作品接口
@@ -273,6 +282,9 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 				config.POST("/email/test", adminConfigHandler.TestEmail)
 				config.GET("/task", adminConfigHandler.GetTaskConfig)
 				config.PUT("/task", adminConfigHandler.SaveTaskConfig)
+				config.GET("/prompt-optimization", adminConfigHandler.GetPromptOptimizationConfig)
+				config.PUT("/prompt-optimization", adminConfigHandler.SavePromptOptimizationConfig)
+				config.GET("/prompt-optimization/logs", promptOptimizationHandler.ListAdmin)
 				config.GET("/models", adminConfigHandler.GetModels)
 				config.PUT("/models/:id", adminConfigHandler.UpdateModel)
 				config.PUT("/models/:id/status", adminConfigHandler.UpdateModelStatus)
@@ -314,6 +326,13 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 			tasks := adminV1.Group("/tasks")
 			{
 				tasks.GET("", adminHandler.GetTaskList)
+			}
+			announcements := adminV1.Group("/announcements")
+			{
+				announcements.GET("", announcementHandler.ListAdmin)
+				announcements.POST("", announcementHandler.Create)
+				announcements.PUT("/:id", announcementHandler.Update)
+				announcements.DELETE("/:id", announcementHandler.Delete)
 			}
 		}
 

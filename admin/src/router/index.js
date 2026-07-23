@@ -39,6 +39,12 @@ const routes = [
         meta: { title: '生成记录', icon: 'List' }
       },
       {
+        path: 'announcements',
+        name: 'Announcements',
+        component: () => import('@/views/Announcements.vue'),
+        meta: { title: '全员通知', icon: 'Bell' }
+      },
+      {
         path: 'reports',
         name: 'Reports',
         component: () => import('@/views/Reports.vue'),

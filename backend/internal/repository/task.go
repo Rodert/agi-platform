@@ -30,6 +30,26 @@ func (r *TaskRepository) FindByID(id int64) (*model.Task, error) {
 	return &task, nil
 }
 
+// FindPendingProviderTasks returns upstream jobs that were submitted before a
+// worker stopped. Re-enqueuing them resumes polling without submitting again.
+func (r *TaskRepository) FindPendingProviderTasks() ([]*model.Task, error) {
+	var tasks []*model.Task
+	err := r.db.Preload("Request").
+		Where("provider_task_id <> '' AND status IN (?)", []string{"processing", "polling"}).
+		Order("updated_at ASC, id ASC").
+		Find(&tasks).Error
+	return tasks, err
+}
+
+func (r *TaskRepository) FindOpenAttempt(taskID int64) (*model.TaskAttempt, error) {
+	var attempt model.TaskAttempt
+	err := r.db.Where("task_id = ? AND status = ?", taskID, "processing").Order("attempt DESC").First(&attempt).Error
+	if err != nil {
+		return nil, err
+	}
+	return &attempt, nil
+}
+
 // FindByUserID 查找用户的任务列表
 func (r *TaskRepository) FindByUserID(userID int64, status, taskType string, page, pageSize int) ([]*model.Task, int64, error) {
 	var tasks []*model.Task

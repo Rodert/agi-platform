@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -58,4 +59,13 @@ func (p *r2Provider) Download(ctx context.Context, key string) (io.ReadCloser, e
 		return nil, fmt.Errorf("读取 R2 对象失败: %w", err)
 	}
 	return result.Body, nil
+}
+
+func (p *r2Provider) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
+	presigner := s3.NewPresignClient(p.client)
+	request, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(p.bucket), Key: aws.String(key)}, func(options *s3.PresignOptions) { options.Expires = ttl })
+	if err != nil {
+		return "", fmt.Errorf("生成 R2 临时读取地址失败: %w", err)
+	}
+	return request.URL, nil
 }

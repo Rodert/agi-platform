@@ -11,7 +11,7 @@ type AIModel struct {
 	ID          int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name        string `gorm:"size:100;uniqueIndex;not null" json:"name"`
 	DisplayName string `gorm:"size:100;not null" json:"display_name"`
-	Type        string `gorm:"size:20;not null;index" json:"type"` // image/video
+	Type        string `gorm:"size:20;not null;index" json:"type"` // image/video/text
 	// Provider is retained for historical rows only. Routing is defined by ChannelModels.
 	Provider      string         `gorm:"size:50;not null" json:"provider"`
 	Description   string         `gorm:"size:500" json:"description"`
@@ -91,6 +91,50 @@ type TaskConfig struct {
 
 func (TaskConfig) TableName() string {
 	return "task_configs"
+}
+
+// PromptOptimizationConfig is the singleton policy for AI prompt refinement.
+// It intentionally remains separate from task execution settings because it is
+// a synchronous text operation and does not create a generation task.
+type PromptOptimizationConfig struct {
+	ID                 int64     `gorm:"primaryKey;default:1" json:"id"`
+	IsActive           bool      `gorm:"not null;default:false" json:"is_active"`
+	ModelName          string    `gorm:"size:100" json:"model_name"`
+	SystemPrompt       string    `gorm:"type:text;not null" json:"system_prompt"`
+	MaxInputLength     int       `gorm:"not null;default:5000" json:"max_input_length"`
+	CreditCost         int       `gorm:"not null;default:0" json:"credit_cost"`
+	RateLimitPerMinute int       `gorm:"not null;default:5" json:"rate_limit_per_minute"`
+	UpdatedAt          time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (PromptOptimizationConfig) TableName() string {
+	return "prompt_optimization_configs"
+}
+
+// PromptOptimizationLog preserves request, billing, routing, and provider
+// errors without coupling prompt improvement to the generation task lifecycle.
+type PromptOptimizationLog struct {
+	ID              int64              `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID          int64              `gorm:"not null;index:idx_prompt_optimization_user_created" json:"user_id"`
+	ModelName       string             `gorm:"size:100;not null" json:"model_name"`
+	ChannelID       int64              `gorm:"not null;index" json:"channel_id"`
+	TargetType      string             `gorm:"size:20;not null" json:"target_type"`
+	TargetModelName string             `gorm:"size:100" json:"target_model_name"`
+	Params          datatypes.JSON     `gorm:"type:json" json:"params"`
+	OriginalPrompt  string             `gorm:"type:text;not null" json:"original_prompt"`
+	OptimizedPrompt string             `gorm:"type:text" json:"optimized_prompt"`
+	CreditCost      int                `gorm:"not null;default:0" json:"credit_cost"`
+	Status          string             `gorm:"size:20;not null;index" json:"status"`
+	ErrorMsg        string             `gorm:"size:1000" json:"error_msg"`
+	LatencyMS       int                `gorm:"not null;default:0" json:"latency_ms"`
+	CreatedAt       time.Time          `gorm:"not null;index:idx_prompt_optimization_user_created" json:"created_at"`
+	UpdatedAt       time.Time          `gorm:"not null" json:"updated_at"`
+	User            *User              `gorm:"foreignKey:UserID" json:"user,omitempty"`
+	Channel         *AIProviderAccount `gorm:"foreignKey:ChannelID" json:"channel,omitempty"`
+}
+
+func (PromptOptimizationLog) TableName() string {
+	return "prompt_optimization_logs"
 }
 
 // Category 分类配置

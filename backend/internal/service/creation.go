@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -222,12 +224,44 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 		return nil, err
 	}
 
-	// 4. 构建参数
+	// 4. Reference uploads use their configured public resource policy so each
+	// upstream provider can fetch the persisted image URL directly.
+	referenceAssets := make([]*objectstorage.StoredObject, 0, len(req.ReferenceImages)+2)
 	if req.FirstFrameURL != "" {
-		params["first_frame_url"] = req.FirstFrameURL
+		url, stored, err := s.prepareVideoReference(context.Background(), req.FirstFrameURL)
+		if err != nil {
+			return nil, errors.NewWithDetails(errors.ErrCodeUploadFailed, "首帧参考图处理失败", err.Error())
+		}
+		params["first_frame_url"] = url
+		if stored != nil {
+			referenceAssets = append(referenceAssets, stored)
+		}
 	}
 	if req.LastFrameURL != "" {
-		params["last_frame_url"] = req.LastFrameURL
+		url, stored, err := s.prepareVideoReference(context.Background(), req.LastFrameURL)
+		if err != nil {
+			return nil, errors.NewWithDetails(errors.ErrCodeUploadFailed, "尾帧参考图处理失败", err.Error())
+		}
+		params["last_frame_url"] = url
+		if stored != nil {
+			referenceAssets = append(referenceAssets, stored)
+		}
+	}
+	referenceURLs := make([]string, 0, len(req.ReferenceImages))
+	for _, source := range req.ReferenceImages {
+		url, stored, err := s.prepareVideoReference(context.Background(), source)
+		if err != nil {
+			return nil, errors.NewWithDetails(errors.ErrCodeUploadFailed, "参考图处理失败", err.Error())
+		}
+		if url != "" {
+			referenceURLs = append(referenceURLs, url)
+		}
+		if stored != nil {
+			referenceAssets = append(referenceAssets, stored)
+		}
+	}
+	if len(referenceURLs) > 0 {
+		params["reference_image_urls"] = referenceURLs
 	}
 
 	paramsJSON, _ := json.Marshal(params)
@@ -273,6 +307,11 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 		if err := tx.Create(task).Error; err != nil {
 			return err
 		}
+		for _, stored := range referenceAssets {
+			if err := s.assetRepo.CreateTx(tx, mediaAssetFromStored(userID, &task.ID, stored)); err != nil {
+				return err
+			}
+		}
 
 		// 更新请求的 TaskID
 		if err := tx.Model(genReq).Update("task_id", task.ID).Error; err != nil {
@@ -312,6 +351,44 @@ func (s *CreationService) GetTask(userID, taskID int64) (*dto.TaskResponse, erro
 	}
 
 	return s.taskToResponse(task), nil
+}
+
+// DownloadTask opens a completed task result after verifying that it belongs
+// to the requesting user. The handler streams the reader as an attachment.
+func (s *CreationService) DownloadTask(userID, taskID int64) (io.ReadCloser, *model.MediaAsset, error) {
+	task, err := s.taskRepo.FindByID(taskID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil, errors.ErrTaskNotFound
+		}
+		return nil, nil, err
+	}
+	if task.UserID != userID {
+		return nil, nil, errors.ErrForbidden
+	}
+	if task.Status != "success" || task.ResultURL == "" {
+		return nil, nil, errors.New(errors.ErrCodeBadRequest, "任务结果尚不可下载")
+	}
+
+	resourceType := "image"
+	if task.Type == "video" {
+		resourceType = "video"
+	}
+	asset, err := s.assetRepo.FindByTaskAndURL(task.ID, resourceType, task.ResultURL)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil, errors.New(errors.ErrCodeNotFound, "生成资源不存在或已清理")
+		}
+		return nil, nil, err
+	}
+	if asset.ExpiresAt != nil && !asset.ExpiresAt.After(time.Now()) {
+		return nil, nil, errors.New(errors.ErrCodeNotFound, "生成资源已过期")
+	}
+	reader, err := s.storageService.Download(context.Background(), asset)
+	if err != nil {
+		return nil, nil, err
+	}
+	return reader, asset, nil
 }
 
 // GetTaskList 获取任务列表
@@ -443,6 +520,25 @@ func validatePrompt(prompt string, maxLength int) error {
 		return errors.New(errors.ErrCodeBadRequest, fmt.Sprintf("提示词不能超过 %d 个字符", maxLength))
 	}
 	return nil
+}
+
+func (s *CreationService) prepareVideoReference(ctx context.Context, source string) (string, *objectstorage.StoredObject, error) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return "", nil, nil
+	}
+	if !strings.HasPrefix(source, "data:") {
+		return source, nil, nil
+	}
+	stored, err := s.storageService.UploadBase64Image(ctx, source)
+	if err != nil {
+		return "", nil, err
+	}
+	url, err := s.storageService.TemporaryReferenceURL(ctx, stored)
+	if err != nil {
+		return "", nil, err
+	}
+	return url, stored, nil
 }
 
 func mediaAssetFromStored(userID int64, taskID *int64, stored *objectstorage.StoredObject) *model.MediaAsset {

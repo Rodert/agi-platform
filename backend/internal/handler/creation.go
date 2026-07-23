@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"fmt"
+	"mime"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -111,6 +113,44 @@ func (h *CreationHandler) GetTask(c *gin.Context) {
 	}
 
 	response.Success(c, result)
+}
+
+// DownloadTask streams a completed image or video as an attachment.
+// @Summary 下载生成结果
+// @Tags 创作
+// @Security Bearer
+// @Param id path int true "任务ID"
+// @Router /api/v1/tasks/{id}/download [get]
+func (h *CreationHandler) DownloadTask(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		response.Error(c, errors.ErrUnauthorized)
+		return
+	}
+	taskID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Error(c, errors.NewWithDetails(errors.ErrCodeBadRequest, "任务ID无效", err.Error()))
+		return
+	}
+	reader, asset, err := h.creationService.DownloadTask(userID.(int64), taskID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	defer reader.Close()
+
+	contentType := asset.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	extensions, _ := mime.ExtensionsByType(contentType)
+	extension := ".bin"
+	if len(extensions) > 0 {
+		extension = extensions[0]
+	}
+	c.DataFromReader(200, asset.SizeBytes, contentType, reader, map[string]string{
+		"Content-Disposition": fmt.Sprintf("attachment; filename=agi-task-%d%s", taskID, extension),
+	})
 }
 
 // GetTaskList 获取任务列表
