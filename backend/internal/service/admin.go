@@ -166,6 +166,10 @@ func (s *AdminService) recordAudit(log *model.AdminLog) {
 	}
 }
 
+func (s *AdminService) RecordSystemUpdate(adminID int64, ip string) {
+	s.recordAudit(&model.AdminLog{AdminID: adminID, Action: "system_update", TargetType: "deployment", Description: "管理员从后台发起系统更新", IP: ip, CreatedAt: time.Now()})
+}
+
 // GetLogs lists persisted administrative audit records.
 func (s *AdminService) GetLogs(req *dto.AdminLogListRequest) ([]*dto.AdminLogResponse, int64, error) {
 	startAt, err := parseAdminLogTime(req.StartAt)

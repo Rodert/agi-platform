@@ -1,6 +1,9 @@
 package handler
 
 import (
+	"bytes"
+	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -93,6 +96,35 @@ func (h *AdminHandler) UpdateProfile(c *gin.Context) {
 	profile, err := h.adminService.UpdateProfile(adminID.(int64), &req)
 	if err != nil { response.Error(c, err); return }
 	response.Success(c, profile)
+}
+
+// TriggerSystemUpdate asks the isolated deployment agent to recreate the app.
+func (h *AdminHandler) TriggerSystemUpdate(c *gin.Context) {
+	if os.Getenv("UPDATE_ENABLED") != "true" {
+		response.Error(c, errors.New(errors.ErrCodeForbidden, "服务器未启用后台更新"))
+		return
+	}
+	token := os.Getenv("UPDATE_AGENT_TOKEN")
+	if token == "" {
+		response.Error(c, errors.New(errors.ErrCodeInternalServer, "后台更新令牌未配置"))
+		return
+	}
+	url := os.Getenv("UPDATE_AGENT_URL")
+	if url == "" { url = "http://updater:8090" }
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url+"/update", bytes.NewReader(nil))
+	if err != nil { response.Error(c, err); return }
+	req.Header.Set("X-Update-Token", token)
+	client := &http.Client{Timeout: 5 * time.Second}
+	result, err := client.Do(req)
+	if err != nil { response.Error(c, errors.NewWithDetails(errors.ErrCodeInternalServer, "无法连接更新服务", err.Error())); return }
+	defer result.Body.Close()
+	if result.StatusCode != http.StatusOK { response.Error(c, errors.New(errors.ErrCodeInternalServer, "更新服务拒绝了请求")); return }
+	h.adminService.RecordSystemUpdate(c.GetInt64("admin_id"), c.ClientIP())
+	response.SuccessWithMessage(c, "更新任务已启动，服务将在几秒内重启", nil)
+}
+
+func (h *AdminHandler) GetSystemUpdateStatus(c *gin.Context) {
+	response.Success(c, gin.H{"enabled": os.Getenv("UPDATE_ENABLED") == "true" && os.Getenv("UPDATE_AGENT_TOKEN") != ""})
 }
 
 func (h *AdminHandler) ListAdmins(c *gin.Context) {

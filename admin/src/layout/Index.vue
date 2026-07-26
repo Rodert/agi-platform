@@ -9,6 +9,7 @@
             v{{ APP_VERSION }}
             <el-badge v-if="hasUpdate" is-dot class="update-dot" />
           </el-button>
+          <el-button v-if="hasUpdate && updateEnabled" class="update-button" type="primary" size="small" @click="startUpdate">立即更新</el-button>
         </div>
       </div>
       <el-menu
@@ -109,6 +110,7 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { APP_VERSION, LATEST_RELEASE_URL, compareVersions } from '@/config/release'
+import { getSystemUpdateStatus, triggerSystemUpdate } from '@/api/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -130,6 +132,7 @@ const username = computed(() => authStore.adminInfo?.name || authStore.adminInfo
 const checkingUpdate = ref(false)
 const hasUpdate = ref(false)
 const latestVersion = ref('')
+const updateEnabled = ref(false)
 
 const checkForUpdate = async (showResult = false) => {
   if (checkingUpdate.value) return
@@ -165,7 +168,28 @@ const checkForUpdate = async (showResult = false) => {
   }
 }
 
-onMounted(() => checkForUpdate())
+onMounted(async () => {
+  checkForUpdate()
+  if (authStore.adminInfo?.role === 'super_admin') {
+    try {
+      updateEnabled.value = Boolean((await getSystemUpdateStatus()).enabled)
+    } catch {
+      updateEnabled.value = false
+    }
+  }
+})
+
+const startUpdate = () => {
+  ElMessageBox.confirm(`将拉取 v${latestVersion.value} 并重启当前服务，期间后台会短暂不可用。确定继续吗？`, '确认更新', {
+    confirmButtonText: '开始更新',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(async () => {
+    await triggerSystemUpdate()
+    ElMessage.success('更新已启动，页面将在几秒后恢复')
+    window.setTimeout(() => window.location.reload(), 10000)
+  }).catch(() => {})
+}
 
 const handleCommand = (command) => {
   if (command === 'logout') {
@@ -239,6 +263,11 @@ const handleCommand = (command) => {
 
 .update-dot {
   margin-left: 5px;
+}
+
+.update-button {
+  display: block;
+  margin-top: 6px;
 }
 
 .header {

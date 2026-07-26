@@ -40,3 +40,5 @@ export const updateWorkStatus = (id, status, reason = '') => {
 export const getAdmins = () => request.get('/admins')
 export const createAdmin = (data) => request.post('/admins', data)
 export const updateAdmin = (id, data) => request.put(`/admins/${id}`, data)
+export const getSystemUpdateStatus = () => request.get('/system/update')
+export const triggerSystemUpdate = () => request.post('/system/update')

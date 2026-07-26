@@ -283,6 +283,12 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, sessionRepo *reposit
 		{
 			adminV1.GET("/profile", adminHandler.GetProfile)
 			adminV1.PUT("/profile", adminHandler.UpdateProfile)
+			system := adminV1.Group("/system")
+			system.Use(middleware.RequireRole("super_admin"))
+			{
+				system.GET("/update", adminHandler.GetSystemUpdateStatus)
+				system.POST("/update", adminHandler.TriggerSystemUpdate)
+			}
 			adminV1.GET("/stats", adminHandler.GetStats)
 			adminV1.GET("/logs", adminHandler.GetLogs)
 			adminV1.GET("/reports", adminHandler.GetReport)

@@ -110,6 +110,18 @@ docker compose up -d
 
 根目录 `VERSION` 是发布版本的唯一来源，当前从 `0.1.0` 开始。修改该文件后推送到默认分支，工作流会创建对应的 GitHub Release，并同时推送同名镜像标签。管理后台左上角显示当前版本，会自动检查 GitHub Release；点击版本号可手动再次检测。
 
+### 后台一键更新
+
+部署机可允许超级管理员从后台直接拉取并重启 `app`。在 `.env` 中设置，并使用发布镜像而非本地构建镜像：
+
+```env
+APP_IMAGE=ghcr.io/rodert/agi-platform:latest
+UPDATE_ENABLED=true
+UPDATE_AGENT_TOKEN=<至少 32 位随机字符串>
+```
+
+执行一次 `docker compose --profile update up -d --build updater app` 后，后台检测到新版时会显示“立即更新”。更新代理拥有 Docker Socket 权限，只应部署在受信任的单机环境，并保持令牌私密。
+
 ## 日常运维
 
 ```bash
