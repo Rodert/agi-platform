@@ -74,3 +74,13 @@ func (r *AIModelRepository) Update(model *model.AIModel) error {
 func (r *AIModelRepository) UpdateStatus(id int64, isActive bool) error {
 	return r.db.Model(&model.AIModel{}).Where("id = ?", id).Update("is_active", isActive).Error
 }
+
+// DeleteUnreferenced removes only catalog records that no channel can call and
+// that are not needed by queued work. Completed task history stores its model
+// name directly and is deliberately retained.
+func (r *AIModelRepository) DeleteUnreferenced() (int64, error) {
+	result := r.db.Where("NOT EXISTS (SELECT 1 FROM channel_models WHERE channel_models.model_id = ai_models.id)").
+		Where("NOT EXISTS (SELECT 1 FROM tasks WHERE tasks.model_name = ai_models.name AND tasks.status IN ?)", []string{"queued", "processing", "uploading", "polling"}).
+		Delete(&model.AIModel{})
+	return result.RowsAffected, result.Error
+}

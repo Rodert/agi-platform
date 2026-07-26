@@ -322,6 +322,16 @@ func (h *AdminConfigHandler) UpdateModelStatus(c *gin.Context) {
 	h.recordAudit(c, "update_model_status", "model", id, "更新模型状态", r)
 	response.Success(c, nil)
 }
+
+func (h *AdminConfigHandler) DeleteUnreferencedModels(c *gin.Context) {
+	count, err := h.modelRepo.DeleteUnreferenced()
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	h.recordAudit(c, "delete_unreferenced_models", "model", 0, "清理未引用模型", map[string]int64{"count": count})
+	response.Success(c, gin.H{"count": count})
+}
 func parseID(c *gin.Context) (int64, error) { return strconv.ParseInt(c.Param("id"), 10, 64) }
 func (h *AdminConfigHandler) GetStorage(c *gin.Context) {
 	v, e := h.storageService.GetStorageConfigs()

@@ -104,10 +104,20 @@ func (h *AdminConfigHandler) UpdateChannel(c *gin.Context) {
 
 func (h *AdminConfigHandler) DeleteChannel(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err == nil {
-		err = h.providerRepo.Delete(id)
-	}
 	if err != nil {
+		response.Error(c, errors.ErrBadRequest)
+		return
+	}
+	hasActiveTasks, err := h.providerRepo.HasActiveTasks(id)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if hasActiveTasks {
+		response.Error(c, errors.New(errors.ErrCodeBadRequest, "渠道仍有排队或执行中的任务，暂不能删除"))
+		return
+	}
+	if err = h.providerRepo.Delete(id); err != nil {
 		response.Error(c, err)
 		return
 	}

@@ -61,3 +61,13 @@ func (r *ChannelModelRepository) Delete(channelID, modelID int64) error {
 func (r *ChannelModelRepository) DeleteMany(channelID int64, modelIDs []int64) error {
 	return r.db.Where("channel_id = ? AND model_id IN ?", channelID, modelIDs).Delete(&model.ChannelModel{}).Error
 }
+
+// DeleteNotIn reconciles one channel against an authoritative upstream model
+// list. It intentionally affects bindings only, never the global model catalog.
+func (r *ChannelModelRepository) DeleteNotIn(channelID int64, modelIDs []int64) error {
+	query := r.db.Where("channel_id = ?", channelID)
+	if len(modelIDs) > 0 {
+		query = query.Where("model_id NOT IN ?", modelIDs)
+	}
+	return query.Delete(&model.ChannelModel{}).Error
+}

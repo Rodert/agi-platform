@@ -12,3 +12,11 @@ func (r *AIProviderAccountRepository) Find(id int64) (*model.AIProviderAccount,e
 func (r *AIProviderAccountRepository) Create(row *model.AIProviderAccount) error { return r.db.Create(row).Error }
 func (r *AIProviderAccountRepository) Update(row *model.AIProviderAccount) error { return r.db.Save(row).Error }
 func (r *AIProviderAccountRepository) Delete(id int64) error { return r.db.Delete(&model.AIProviderAccount{}, id).Error }
+
+func (r *AIProviderAccountRepository) HasActiveTasks(id int64) (bool, error) {
+	var count int64
+	err := r.db.Model(&model.Task{}).
+		Where("channel_id = ? AND status IN ?", id, []string{"queued", "processing", "uploading", "polling"}).
+		Count(&count).Error
+	return count > 0, err
+}

@@ -329,6 +329,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, sessionRepo *reposit
 				config.GET("/models", adminConfigHandler.GetModels)
 				config.PUT("/models/:id", adminConfigHandler.UpdateModel)
 				config.PUT("/models/:id/status", adminConfigHandler.UpdateModelStatus)
+				config.DELETE("/models/unreferenced", adminConfigHandler.DeleteUnreferencedModels)
 				config.GET("/storage", adminConfigHandler.GetStorage)
 				config.POST("/storage", adminConfigHandler.CreateStorage)
 				config.PUT("/storage/:id", adminConfigHandler.UpdateStorage)

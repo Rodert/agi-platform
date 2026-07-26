@@ -73,7 +73,7 @@ func TestDiscoverGrokModelsClassifiesVideoAndTextModels(t *testing.T) {
 		if r.URL.Path != "/v1/models" {
 			t.Fatalf("unexpected request path: %s", r.URL.Path)
 		}
-		_, _ = w.Write([]byte(`{"data":[{"id":"grok-video-1.5"},{"id":"grok-text"}]}`))
+		_, _ = w.Write([]byte(`{"data":[{"id":"grok-image-video"},{"id":"grok-video-1.5fast"},{"id":"grok-text"}]}`))
 	}))
 	defer server.Close()
 
@@ -81,7 +81,7 @@ func TestDiscoverGrokModelsClassifiesVideoAndTextModels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(models) != 2 || models[0].Name != "grok-video-1.5" || models[0].Type != "video" || models[1].Name != "grok-text" || models[1].Type != "text" {
+	if len(models) != 3 || models[0].Name != "grok-image-video" || models[0].Type != "video" || models[1].Name != "grok-video-1.5fast" || models[1].Type != "video" || models[2].Name != "grok-text" || models[2].Type != "text" {
 		t.Fatalf("unexpected discovered models: %#v", models)
 	}
 }

@@ -19,6 +19,7 @@ func Register(provider string, factory Factory) { factories[provider] = factory 
 func init() {
 	Register("openai", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
 	Register("chatgpt", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
+	Register("gemini", func(config map[string]interface{}) (Adapter, error) { return NewGeminiAdapter(config), nil })
 	Register("jimeng", func(config map[string]interface{}) (Adapter, error) { return NewJimengAdapter(config), nil })
 	Register("grok", func(config map[string]interface{}) (Adapter, error) { return NewGrokAdapter(config), nil })
 	Register("demo", func(config map[string]interface{}) (Adapter, error) { return NewDemoAdapter(), nil })
@@ -177,6 +178,11 @@ func normalizeDiscoveredModels(names []string) []DiscoveredModel {
 
 func discoveredType(name string) string {
 	name = strings.ToLower(name)
+	// Grok's image-to-video model contains both words. It must remain a video
+	// task so it is routed to the asynchronous Grok video adapter.
+	if strings.HasPrefix(name, "grok-") && strings.Contains(name, "video") {
+		return "video"
+	}
 	if strings.Contains(name, "image") || strings.Contains(name, "dall-e") || strings.Contains(name, "seedream") || strings.Contains(name, "flux") {
 		return "image"
 	}

@@ -2,7 +2,7 @@
   <div class="channels-page" v-loading="loading">
     <div class="page-head">
       <div><h2>渠道与模型</h2><p>每行一个渠道账号；模型能力在全局目录统一维护。</p></div>
-      <el-button type="primary" @click="openChannel()">添加渠道</el-button>
+      <div><el-button plain @click="purgeUnreferencedModels">清理未引用模型</el-button><el-button type="primary" @click="openChannel()">添加渠道</el-button></div>
     </div>
 
     <div v-if="activeChannel" class="active-account" aria-live="polite">
@@ -20,7 +20,7 @@
             <div class="model-list-head">
               <strong>已识别模型</strong>
               <div>
-                <el-button size="small" :loading="syncing === row.id" @click.stop="syncModels(row)">同步上游模型</el-button>
+                <el-button size="small" :loading="syncing === row.id" @click.stop="syncModels(row)">重新同步上游模型</el-button>
                 <el-button size="small" type="primary" plain @click.stop="openBind(row)">手动绑定模型</el-button>
                 <el-button v-if="selectedModelIDs(row).length" size="small" type="danger" plain @click.stop="removeSelectedModels(row)">删除选中 ({{ selectedModelIDs(row).length }})</el-button>
               </div>
@@ -128,7 +128,8 @@ function channelRowClass({ row }) { return row.id === activeChannelId.value ? 'i
 function openChannel(row) { if (row) selectChannel(row); Object.assign(channelForm, emptyChannel(), row || {}, { api_key: '' }); ensureGrokConfig(); channelDialog.value = true }
 async function saveChannel() { const body = { ...channelForm }; delete body.id; if (channelForm.id) await request.put(`/channels/${channelForm.id}`, body); else await request.post('/channels', body); channelDialog.value = false; ElMessage.success('渠道已保存'); await load() }
 async function removeChannel(row) { selectChannel(row); await ElMessageBox.confirm(`将删除账号「${row.name}」（${row.provider}）及其全部模型绑定。此操作无法撤销。`, '确认删除当前账号', { type: 'warning', confirmButtonText: `删除「${row.name}」`, cancelButtonText: '取消' }); await request.delete(`/channels/${row.id}`); ElMessage.success(`账号「${row.name}」已删除`); await load() }
-async function syncModels(row) { selectChannel(row); syncing.value = row.id; try { const result = await request.post(`/channels/${row.id}/sync-models`); ElMessage.success(`账号「${row.name}」已同步 ${result.length} 个模型`); await load() } finally { syncing.value = 0 } }
+async function syncModels(row) { selectChannel(row); await ElMessageBox.confirm(`将以账号「${row.name}」当前上游模型列表为准，解除上游已不再返回的模型绑定。历史任务不会删除。`, '重新同步上游模型', { type: 'warning', confirmButtonText: '重新同步' }); syncing.value = row.id; try { const result = await request.post(`/channels/${row.id}/sync-models`); ElMessage.success(`账号「${row.name}」已同步 ${result.length} 个模型`); await load() } finally { syncing.value = 0 } }
+async function purgeUnreferencedModels() { await ElMessageBox.confirm('将删除没有任何渠道绑定、且没有排队或生成中任务引用的全局模型。历史任务和作品不会删除。', '清理未引用模型', { type: 'warning', confirmButtonText: '清理' }); const result = await request.delete('/config/models/unreferenced'); ElMessage.success(`已清理 ${result.count || 0} 个未引用模型`); await load() }
 function openBind(row) { selectChannel(row); Object.assign(bindForm, { channel_id: row.id, model_name: '', type: 'image' }); bindDialog.value = true }
 async function bindModel() { await request.post(`/channels/${bindForm.channel_id}/models`, { model_name: bindForm.model_name, type: bindForm.type, is_active: true }); bindDialog.value = false; ElMessage.success('模型已绑定'); await load() }
 async function setBindingStatus(channel, binding, value) { selectChannel(channel); await request.put(`/channels/${channel.id}/models/${binding.model_id}/status`, { is_active: value }); binding.is_active = value; ElMessage.success(`账号「${channel.name}」中的模型「${binding.model?.name}」已${value ? '启用' : '停用'}`) }
