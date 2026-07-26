@@ -2,7 +2,14 @@
   <el-container class="layout">
     <el-aside width="200px" class="sidebar">
       <div class="logo">
-        <h3>AGI Platform</h3>
+        <div>
+          <h3>AGI Platform</h3>
+          <el-button class="version-check" link :loading="checkingUpdate" @click="checkForUpdate(true)">
+            <el-icon><RefreshRight /></el-icon>
+            v{{ APP_VERSION }}
+            <el-badge v-if="hasUpdate" is-dot class="update-dot" />
+          </el-button>
+        </div>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -85,7 +92,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -97,9 +104,11 @@ import {
   Connection,
   Operation,
   Files,
-  UserFilled
+  UserFilled,
+  RefreshRight
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { APP_VERSION, LATEST_RELEASE_URL, compareVersions } from '@/config/release'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,6 +127,45 @@ const openMenus = computed(() => {
 })
 const currentTitle = computed(() => route.meta.title || '')
 const username = computed(() => authStore.adminInfo?.name || authStore.adminInfo?.username || 'admin')
+const checkingUpdate = ref(false)
+const hasUpdate = ref(false)
+const latestVersion = ref('')
+
+const checkForUpdate = async (showResult = false) => {
+  if (checkingUpdate.value) return
+
+  checkingUpdate.value = true
+  try {
+    const response = await fetch(LATEST_RELEASE_URL, {
+      headers: { Accept: 'application/vnd.github+json' }
+    })
+
+    if (!response.ok) {
+      throw new Error('暂未发布可检测的版本')
+    }
+
+    const release = await response.json()
+    latestVersion.value = String(release.tag_name || '').replace(/^v/, '')
+    hasUpdate.value = Boolean(latestVersion.value && compareVersions(latestVersion.value, APP_VERSION) > 0)
+
+    if (showResult) {
+      if (hasUpdate.value) {
+        ElMessageBox.alert(`发现新版本 v${latestVersion.value}，当前版本为 v${APP_VERSION}。`, '检测到新版本', {
+          confirmButtonText: '知道了',
+          type: 'info'
+        })
+      } else {
+        ElMessage.success(`当前已是最新版本 v${APP_VERSION}`)
+      }
+    }
+  } catch (error) {
+    if (showResult) ElMessage.warning(error.message || '版本检测失败，请稍后重试')
+  } finally {
+    checkingUpdate.value = false
+  }
+}
+
+onMounted(() => checkForUpdate())
 
 const handleCommand = (command) => {
   if (command === 'logout') {
@@ -172,6 +220,25 @@ const handleCommand = (command) => {
   color: #fff;
   margin: 0;
   font-size: 18px;
+}
+
+.version-check {
+  min-height: 20px;
+  padding: 0;
+  color: #bfcbd9;
+  font-size: 12px;
+}
+
+.version-check:hover {
+  color: #fff;
+}
+
+.version-check .el-icon {
+  margin-right: 4px;
+}
+
+.update-dot {
+  margin-left: 5px;
 }
 
 .header {

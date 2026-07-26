@@ -82,6 +82,7 @@ docker compose ps
 
 ```text
 ghcr.io/<GitHub 用户或组织>/agi-platform:latest
+ghcr.io/<GitHub 用户或组织>/agi-platform:<版本号>
 ghcr.io/<GitHub 用户或组织>/agi-platform:sha-<完整提交 SHA>
 ```
 
@@ -104,6 +105,10 @@ docker login ghcr.io
 docker compose pull app
 docker compose up -d
 ```
+
+## 版本发布与后台更新检测
+
+根目录 `VERSION` 是发布版本的唯一来源，当前从 `0.1.0` 开始。修改该文件后推送到默认分支，工作流会创建对应的 GitHub Release，并同时推送同名镜像标签。管理后台左上角显示当前版本，会自动检查 GitHub Release；点击版本号可手动再次检测。
 
 ## 日常运维
 
