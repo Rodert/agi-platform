@@ -93,7 +93,7 @@
   <el-dialog v-model="versionDialogVisible" title="版本管理" width="420px" destroy-on-close>
     <div class="version-dialog-heading">
       <span>当前版本</span>
-      <el-button text :loading="checkingUpdate" @click="refreshVersions"><el-icon><RefreshRight /></el-icon>刷新版本</el-button>
+      <el-button text :loading="checkingUpdate" @click="refreshVersions(true)"><el-icon><RefreshRight /></el-icon>刷新版本</el-button>
     </div>
     <div class="current-version">v{{ APP_VERSION }}</div>
     <div class="version-status">
@@ -165,7 +165,7 @@ const releases = ref([])
 const selectedRollbackVersion = ref('')
 const rollbackVersions = computed(() => releases.value.filter((release) => release.version !== APP_VERSION).slice(0, 3))
 
-const refreshVersions = async () => {
+const refreshVersions = async (notifyOnError = false) => {
   if (checkingUpdate.value) return
 
   checkingUpdate.value = true
@@ -189,7 +189,7 @@ const refreshVersions = async () => {
     latestVersion.value = releases.value[0]?.version || APP_VERSION
     hasUpdate.value = Boolean(latestVersion.value && compareVersions(latestVersion.value, APP_VERSION) > 0)
   } catch (error) {
-    ElMessage.warning(error.message || '版本检测失败，请稍后重试')
+    if (notifyOnError) ElMessage.warning(error.message || '版本检测失败，请稍后重试')
   } finally {
     checkingUpdate.value = false
   }
