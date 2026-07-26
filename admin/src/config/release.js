@@ -1,6 +1,4 @@
 export const APP_VERSION = __APP_VERSION__
-export const LATEST_RELEASE_URL = 'https://api.github.com/repos/Rodert/agi-platform/releases/latest'
-export const RELEASES_URL = 'https://api.github.com/repos/Rodert/agi-platform/releases?per_page=20'
 
 export const compareVersions = (left, right) => {
   const leftParts = left.replace(/^v/, '').split('.').map(Number)

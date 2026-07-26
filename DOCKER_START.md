@@ -87,6 +87,8 @@ ghcr.io/<GitHub 用户或组织>/agi-platform:<版本号>
 ghcr.io/<GitHub 用户或组织>/agi-platform:sha-<完整提交 SHA>
 ```
 
+每个镜像标签同时包含 `linux/amd64` 和 `linux/arm64`。Docker 会按部署机器的架构自动选择镜像，无需在标签中区分架构；不构建 Windows 或 macOS 容器镜像。
+
 GitHub 无法感知纯本地 `git commit`，因此必须推送：
 
 ```bash
@@ -109,7 +111,9 @@ docker compose up -d
 
 ## 版本发布与后台更新检测
 
-根目录 `VERSION` 是发布版本的唯一来源，当前从 `0.1.0` 开始。修改该文件后推送到默认分支，工作流会创建对应的 GitHub Release，并同时推送同名镜像标签。管理后台左上角显示当前版本，会自动检查 GitHub Release；点击版本号可手动再次检测。
+根目录 `VERSION` 是发布版本的唯一来源，当前从 `0.1.0` 开始。修改该文件后推送到默认分支，工作流会创建对应的 GitHub Release，并同时推送同名镜像标签。管理后台左上角显示当前版本；打开版本管理可读取后端缓存，点击“刷新版本”可手动再次检测。
+
+版本检查由后端访问 GitHub，并以 Redis 缓存结果一小时。页面刷新不会触发 GitHub 请求；打开版本管理读取缓存，只有“刷新版本”会强制重新检查。匿名 GitHub API 的额度较低，生产环境建议在 `.env` 配置一个仅有仓库只读权限的 `GITHUB_TOKEN`。
 
 ### 后台一键更新
 

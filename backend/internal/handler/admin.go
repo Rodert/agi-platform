@@ -18,6 +18,7 @@ import (
 type AdminHandler struct {
 	adminService *service.AdminService
 	redeemCodeService *service.RedeemCodeService
+	releaseService *service.ReleaseService
 }
 
 // GetReport returns operational reporting data for an inclusive date range.
@@ -40,11 +41,24 @@ func (h *AdminHandler) GetReport(c *gin.Context) {
 	response.Success(c, result)
 }
 
-func NewAdminHandler(adminService *service.AdminService, redeemCodeService *service.RedeemCodeService) *AdminHandler {
+func NewAdminHandler(adminService *service.AdminService, redeemCodeService *service.RedeemCodeService, releaseService *service.ReleaseService) *AdminHandler {
 	return &AdminHandler{
 		adminService: adminService,
 		redeemCodeService: redeemCodeService,
+		releaseService: releaseService,
 	}
+}
+
+// GetSystemReleases returns cached release metadata. A force request is reserved for
+// the explicit refresh button and is the only path that bypasses the one-hour cache.
+func (h *AdminHandler) GetSystemReleases(c *gin.Context) {
+	force := c.Query("force") == "true"
+	releases, checkedAt, err := h.releaseService.List(c.Request.Context(), force)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, gin.H{"releases": releases, "checked_at": checkedAt})
 }
 
 func (h *AdminHandler) CreateRedeemCodes(c *gin.Context) {

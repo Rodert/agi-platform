@@ -160,6 +160,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	userService := service.NewUserService(userRepo, creditRepo, codeRepo, sessionRepo)
 	creationService := service.NewCreationService(taskRepo, requestRepo, aiModelRepo, channelModelRepo, creditRepo, mediaAssetRepo, configRepo, storageService, queueProducer, database.DB)
 	adminService := service.NewAdminService(adminRepo, workRepo, taskRepo, userRepo, creditRepo, mediaAssetRepo, objectStorageManager, &cfg.JWT, database.DB)
+	releaseService := service.NewReleaseService(database.RDB)
 	workService := service.NewWorkService(workRepo, taskRepo, userRepo)
 	storageConfigService := service.NewStorageConfigService(storageConfigRepo)
 	resourcePolicyService := service.NewResourcePolicyService(resourcePolicyRepo)
@@ -171,7 +172,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	authHandler := handler.NewAuthHandler(authService)
 	userHandler := handler.NewUserHandler(userService, redeemCodeService)
 	creationHandler := handler.NewCreationHandler(creationService)
-	adminHandler := handler.NewAdminHandler(adminService, redeemCodeService)
+	adminHandler := handler.NewAdminHandler(adminService, redeemCodeService, releaseService)
 	workHandler := handler.NewWorkHandler(workService)
 	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, channelModelRepo, channelCatalogService, storageConfigService, resourcePolicyService, emailService, adminRepo, redeemCodeService)
 	announcementHandler := handler.NewAnnouncementHandler(announcementService)
@@ -283,6 +284,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, sessionRepo *reposit
 		{
 			adminV1.GET("/profile", adminHandler.GetProfile)
 			adminV1.PUT("/profile", adminHandler.UpdateProfile)
+			adminV1.GET("/system/releases", adminHandler.GetSystemReleases)
 			system := adminV1.Group("/system")
 			system.Use(middleware.RequireRole("super_admin"))
 			{

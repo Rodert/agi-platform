@@ -4,7 +4,7 @@
       <div class="logo">
         <div>
           <h3>AGI Platform</h3>
-          <el-button class="version-check" link @click="versionDialogVisible = true; refreshVersions()">
+          <el-button class="version-check" link @click="openVersionDialog">
             <el-icon><RefreshRight /></el-icon>
             v{{ APP_VERSION }}
             <el-badge v-if="hasUpdate" is-dot class="update-dot" />
@@ -136,8 +136,8 @@ import {
   CircleCheckFilled
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { APP_VERSION, RELEASES_URL, compareVersions } from '@/config/release'
-import { getSystemUpdateStatus, triggerSystemUpdate } from '@/api/admin'
+import { APP_VERSION, compareVersions } from '@/config/release'
+import { getSystemReleases, getSystemUpdateStatus, triggerSystemUpdate } from '@/api/admin'
 
 const route = useRoute()
 const router = useRouter()
@@ -165,38 +165,26 @@ const releases = ref([])
 const selectedRollbackVersion = ref('')
 const rollbackVersions = computed(() => releases.value.filter((release) => release.version !== APP_VERSION).slice(0, 3))
 
-const refreshVersions = async (notifyOnError = false) => {
+const refreshVersions = async (force = false) => {
   if (checkingUpdate.value) return
 
   checkingUpdate.value = true
   try {
-    const response = await fetch(RELEASES_URL, {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-
-    if (!response.ok) {
-      throw new Error('暂未发布可检测的版本')
-    }
-
-    const items = await response.json()
-    releases.value = items
-      .filter((release) => !release.draft && !release.prerelease && /^v?\d+\.\d+\.\d+$/.test(release.tag_name || ''))
-      .map((release) => ({
-        version: String(release.tag_name).replace(/^v/, ''),
-        publishedAt: new Date(release.published_at).toLocaleDateString('zh-CN')
-      }))
+    const result = await getSystemReleases(force)
+    releases.value = (result.releases || [])
+      .filter((release) => /^\d+\.\d+\.\d+$/.test(release.version || ''))
+      .map((release) => ({ version: release.version, publishedAt: release.published_at }))
       .sort((left, right) => compareVersions(right.version, left.version))
     latestVersion.value = releases.value[0]?.version || APP_VERSION
     hasUpdate.value = Boolean(latestVersion.value && compareVersions(latestVersion.value, APP_VERSION) > 0)
   } catch (error) {
-    if (notifyOnError) ElMessage.warning(error.message || '版本检测失败，请稍后重试')
+    if (force) ElMessage.warning(error.response?.data?.error?.message || error.message || '版本检测失败，请稍后重试')
   } finally {
     checkingUpdate.value = false
   }
 }
 
 onMounted(async () => {
-  refreshVersions()
   if (authStore.adminInfo?.role === 'super_admin') {
     try {
       updateEnabled.value = Boolean((await getSystemUpdateStatus()).enabled)
@@ -205,6 +193,11 @@ onMounted(async () => {
     }
   }
 })
+
+const openVersionDialog = () => {
+  versionDialogVisible.value = true
+  refreshVersions()
+}
 
 const startUpdate = (version) => {
   if (!version) return

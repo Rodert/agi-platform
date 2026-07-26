@@ -61,6 +61,7 @@ services:
       UPDATE_AGENT_URL: http://updater:8090
       UPDATE_AGENT_TOKEN: ${UPDATE_AGENT_TOKEN:-}
       UPDATE_IMAGE_REPOSITORY: ${UPDATE_IMAGE_REPOSITORY:-ghcr.io/rodert/agi-platform}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       TZ: ${TZ:-Asia/Shanghai}
     ports:
       - "${HTTP_PORT:-3012}:80"
