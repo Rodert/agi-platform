@@ -2,6 +2,7 @@ server:
   name: agi-platform-backend
   env: development
   port: 8080
+  public_base_url: http://localhost:8080
   debug: true
   read_timeout: 60
   write_timeout: 60

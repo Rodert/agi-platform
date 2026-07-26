@@ -12,9 +12,9 @@ CREATE TABLE IF NOT EXISTS `resource_policies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='对象存储资源策略';
 
 INSERT INTO `resource_policies` (`resource_type`,`key_prefix`,`retention_days`,`is_public`,`cache_max_age`,`max_size_mb`) VALUES
-('image', 'images/', 0, 1, 86400, 20),
-('video', 'videos/', 30, 1, 86400, 1024),
-('thumbnail', 'thumbnails/', 30, 1, 86400, 10),
+('image', 'images/', 7, 1, 86400, 20),
+('video', 'videos/', 7, 1, 86400, 1024),
+('thumbnail', 'thumbnails/', 7, 1, 86400, 10),
 ('reference', 'references/', 30, 1, 86400, 5)
 ON DUPLICATE KEY UPDATE `resource_type` = VALUES(`resource_type`);
 

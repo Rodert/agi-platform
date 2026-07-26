@@ -61,6 +61,14 @@ func (p *r2Provider) Download(ctx context.Context, key string) (io.ReadCloser, e
 	return result.Body, nil
 }
 
+func (p *r2Provider) Delete(ctx context.Context, key string) error {
+	_, err := p.client.DeleteObject(ctx, &s3.DeleteObjectInput{Bucket: aws.String(p.bucket), Key: aws.String(key)})
+	if err != nil {
+		return fmt.Errorf("删除 R2 对象失败: %w", err)
+	}
+	return nil
+}
+
 func (p *r2Provider) PresignGet(ctx context.Context, key string, ttl time.Duration) (string, error) {
 	presigner := s3.NewPresignClient(p.client)
 	request, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(p.bucket), Key: aws.String(key)}, func(options *s3.PresignOptions) { options.Expires = ttl })

@@ -54,10 +54,11 @@ func main() {
 	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)
 	mediaAssetRepo := repository.NewMediaAssetRepository(database.DB)
 	creditRepo := repository.NewCreditRepository(database.DB)
-	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
+	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo, cfg.Server.PublicBaseURL)
 
 	// 创建 Processor
 	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo, channelModelRepo, mediaAssetRepo, creditRepo, objectStorageManager)
+	assetCleaner := worker.NewAssetCleaner(mediaAssetRepo, objectStorageManager)
 	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
 
 	// Redis stream entries that were in-flight during a restart are not claimed
@@ -90,7 +91,9 @@ func main() {
 	)
 
 	// 启动消费者
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go runExpiredAssetCleanup(ctx, assetCleaner)
 	if err := consumer.Start(ctx); err != nil {
 		logger.Fatal(fmt.Sprintf("启动消费者失败: %v", err))
 	}
@@ -106,8 +109,28 @@ func main() {
 	logger.Info("🛑 正在关闭 Worker 服务...")
 
 	consumer.Stop()
+	cancel()
 
 	time.Sleep(1 * time.Second) // 等待处理中的任务完成
 
 	logger.Info("✅ Worker 服务已关闭")
+}
+
+func runExpiredAssetCleanup(ctx context.Context, cleaner *worker.AssetCleaner) {
+	cleanup := func() {
+		if err := cleaner.Run(ctx); err != nil {
+			logger.Error("清理过期生成资源失败", zap.Error(err))
+		}
+	}
+	cleanup()
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			cleanup()
+		}
+	}
 }

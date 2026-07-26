@@ -1,7 +1,12 @@
 import type { User, Work, Task, AIModel, Announcement, Ledger, PageResponse, UserSession, CreditPackage } from '../types'
 
-// API配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
+// Production requests stay on the current origin so the reverse proxy handles
+// `/api`. Ignore a stale local-development URL that could otherwise be baked
+// into a production Docker image.
+const configuredApiBaseURL = import.meta.env.VITE_API_BASE_URL?.trim() || ''
+const API_BASE_URL = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/i.test(configuredApiBaseURL)
+  ? ''
+  : configuredApiBaseURL
 
 // 统一响应结构
 interface ApiResponse<T = any> {

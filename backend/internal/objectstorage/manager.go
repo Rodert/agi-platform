@@ -41,6 +41,7 @@ type uploadInput struct {
 type provider interface {
 	Upload(context.Context, uploadInput) error
 	Download(context.Context, string) (io.ReadCloser, error)
+	Delete(context.Context, string) error
 	PresignGet(context.Context, string, time.Duration) (string, error)
 }
 
@@ -57,6 +58,12 @@ func (m *Manager) TemporaryReadURL(ctx context.Context, stored *StoredObject, tt
 	if policy.IsPublic {
 		if stored.PublicURL == "" {
 			return "", fmt.Errorf("公开参考资源缺少访问地址")
+		}
+		if strings.HasPrefix(stored.PublicURL, "/") {
+			if m.publicBaseURL == "" {
+				return "", fmt.Errorf("本地公开资源需要配置 PUBLIC_BASE_URL")
+			}
+			return strings.TrimRight(m.publicBaseURL, "/") + stored.PublicURL, nil
 		}
 		return stored.PublicURL, nil
 	}
@@ -78,6 +85,7 @@ type Manager struct {
 	configRepo *repository.StorageConfigRepository
 	policyRepo *repository.ResourcePolicyRepository
 	httpClient *http.Client
+	publicBaseURL string
 }
 
 // Download opens an existing object through the storage configuration that
@@ -98,8 +106,24 @@ func (m *Manager) Download(ctx context.Context, asset *model.MediaAsset) (io.Rea
 	return provider.Download(ctx, asset.ObjectKey)
 }
 
-func NewManager(configRepo *repository.StorageConfigRepository, policyRepo *repository.ResourcePolicyRepository) *Manager {
-	return &Manager{configRepo: configRepo, policyRepo: policyRepo, httpClient: &http.Client{Timeout: 10 * time.Minute}}
+// Delete removes an object from the storage configuration that created it.
+func (m *Manager) Delete(ctx context.Context, asset *model.MediaAsset) error {
+	if asset == nil || asset.StorageConfigID == 0 || asset.ObjectKey == "" {
+		return fmt.Errorf("待清理资源信息不完整")
+	}
+	config, err := m.configRepo.FindByID(asset.StorageConfigID)
+	if err != nil {
+		return err
+	}
+	provider, err := newProvider(config)
+	if err != nil {
+		return err
+	}
+	return provider.Delete(ctx, asset.ObjectKey)
+}
+
+func NewManager(configRepo *repository.StorageConfigRepository, policyRepo *repository.ResourcePolicyRepository, publicBaseURL string) *Manager {
+	return &Manager{configRepo: configRepo, policyRepo: policyRepo, httpClient: &http.Client{Timeout: 10 *time.Minute}, publicBaseURL: strings.TrimRight(publicBaseURL, "/")}
 }
 
 func (m *Manager) UploadBase64(ctx context.Context, resourceType, encoded string) (*StoredObject, error) {
@@ -288,10 +312,10 @@ func buildPublicURL(config *model.StorageConfig, policy *model.ResourcePolicy, o
 	if !policy.IsPublic {
 		return "", nil
 	}
-	base := strings.TrimRight(config.Domain, "/")
-	if base == "" && config.Type == "local" {
-		base = "http://localhost:8080/uploads"
+	if config.Type == "local" {
+		return "/uploads/" + objectKey, nil
 	}
+	base := strings.TrimRight(config.Domain, "/")
 	if base == "" {
 		return "", fmt.Errorf("公开资源策略要求配置访问域名")
 	}

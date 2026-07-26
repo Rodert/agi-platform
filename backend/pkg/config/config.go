@@ -26,6 +26,7 @@ type ServerConfig struct {
 	Name         string `mapstructure:"name"`
 	Env          string `mapstructure:"env"`
 	Port         int    `mapstructure:"port"`
+	PublicBaseURL string `mapstructure:"public_base_url"`
 	Debug        bool   `mapstructure:"debug"`
 	ReadTimeout  int    `mapstructure:"read_timeout"`
 	WriteTimeout int    `mapstructure:"write_timeout"`
@@ -124,6 +125,9 @@ func Load(configPath string) (*Config, error) {
 func overrideFromEnv(cfg *Config) {
 	if v := os.Getenv("APP_PORT"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.Server.Port)
+	}
+	if v := os.Getenv("PUBLIC_BASE_URL"); v != "" {
+		cfg.Server.PublicBaseURL = v
 	}
 	if v := os.Getenv("DB_HOST"); v != "" {
 		cfg.Database.Host = v

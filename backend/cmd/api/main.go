@@ -157,7 +157,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	creditService := service.NewCreditService(database.DB)
 	inviteService := service.NewInvitationService(database.DB)
 	emailService := service.NewEmailService(configRepo)
-	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
+	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo, cfg.Server.PublicBaseURL)
 	storageService := service.NewStorageService(objectStorageManager)
 	authService := service.NewAuthService(userRepo, codeRepo, configRepo, creditService, inviteService, emailService, sessionRepo, adminRepo, &cfg.JWT, database.DB)
 	userService := service.NewUserService(userRepo, creditRepo, codeRepo, sessionRepo)

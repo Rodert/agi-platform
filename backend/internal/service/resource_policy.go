@@ -7,6 +7,14 @@ import (
 	"gorm.io/gorm"
 )
 
+var generatedResourceTypes = map[string]struct{}{
+	"image":     {},
+	"video":     {},
+	"thumbnail": {},
+}
+
+const generatedAssetRetentionDays = 7
+
 type ResourcePolicyService struct {
 	repo *repository.ResourcePolicyRepository
 }
@@ -30,6 +38,9 @@ func (s *ResourcePolicyService) Update(resourceType string, input *model.Resourc
 	}
 	if !input.IsPublic {
 		return nil, errors.New(errors.ErrCodeBadRequest, "当前资源类型必须开启公开访问")
+	}
+	if _, temporary := generatedResourceTypes[resourceType]; temporary && input.RetentionDays != generatedAssetRetentionDays {
+		return nil, errors.New(errors.ErrCodeBadRequest, "图片、视频及缩略图固定保留 7 天")
 	}
 	policy.KeyPrefix, policy.RetentionDays, policy.IsPublic, policy.CacheMaxAge, policy.MaxSizeMB = input.KeyPrefix, input.RetentionDays, input.IsPublic, input.CacheMaxAge, input.MaxSizeMB
 	if err := s.repo.Update(policy); err != nil {

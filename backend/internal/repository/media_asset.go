@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/javapub/agi-platform-backend/internal/model"
 	"gorm.io/gorm"
 )
@@ -20,4 +22,15 @@ func (r *MediaAssetRepository) FindByTaskAndURL(taskID int64, resourceType, publ
 	err := r.db.Where("task_id = ? AND resource_type = ? AND public_url = ?", taskID, resourceType, publicURL).
 		Order("id DESC").First(&asset).Error
 	return &asset, err
+}
+
+func (r *MediaAssetRepository) FindExpired(before time.Time, limit int) ([]*model.MediaAsset, error) {
+	var assets []*model.MediaAsset
+	err := r.db.Where("expires_at IS NOT NULL AND expires_at <= ?", before).
+		Order("expires_at ASC, id ASC").Limit(limit).Find(&assets).Error
+	return assets, err
+}
+
+func (r *MediaAssetRepository) Delete(id int64) error {
+	return r.db.Delete(&model.MediaAsset{}, id).Error
 }
