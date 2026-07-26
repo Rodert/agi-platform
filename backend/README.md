@@ -9,7 +9,7 @@
 - **ORM**: GORM
 - **数据库**: MySQL 8.0+
 - **缓存**: Redis 7.0+
-- **对象存储**: 本地存储 / Cloudflare R2
+- **文件存储**: 本地持久化卷 / Cloudflare R2
 - **消息队列**: Redis Stream
 
 ## 功能模块
@@ -106,8 +106,7 @@ make docker        # 构建 Docker 镜像
 ## API 文档
 
 启动服务后访问：
-- Swagger UI: http://localhost:8080/swagger/index.html
-- API 文档: `/docs/api/`
+- API 健康检查: http://localhost:8080/health
 
 ## 环境变量
 
@@ -128,8 +127,7 @@ REDIS_PORT=6379
 # JWT
 JWT_SECRET=your-secret-key
 
-# 对象存储通过管理后台的系统配置管理
-# 支持本地存储与 Cloudflare R2
+# 文件上传支持本地持久化目录和 Cloudflare R2；由后台存储配置管理
 ```
 
 ## 部署
@@ -137,11 +135,8 @@ JWT_SECRET=your-secret-key
 ### Docker 部署
 
 ```bash
-# 构建镜像
-make docker
-
-# 启动服务
-make docker-up
+# 请在项目根目录执行
+docker compose up -d --build
 ```
 
 ### 生产环境

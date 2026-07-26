@@ -15,7 +15,7 @@ agi-platform/
 │   └── bin/          # 编译产物
 ├── admin/            # 管理后台（Vue 3）
 │   └── src/          # 前端源码
-├── frontend/         # 用户端（待开发）
+├── frontend/         # 用户端（React + Vite）
 ├── docker-compose.yml # Docker配置
 └── start.sh          # 一键启动脚本
 ```
@@ -28,8 +28,8 @@ agi-platform/
 # 启动所有服务（单应用镜像 + MySQL + Redis）
 ./start.sh
 
-# 或使用 docker-compose
-docker-compose up -d --build
+# 或使用 Docker Compose
+docker compose up -d --build
 ```
 
 部署版统一入口默认使用 `3012` 端口：用户端为 `http://localhost:3012/`，管理后台为 `http://localhost:3012/admin/`。
@@ -52,18 +52,17 @@ docker compose -f docker-compose.local.yml up
 
 #### 启动后端
 ```bash
-cd backend
-
-# 1. 启动基础服务
-docker-compose up -d mysql redis
+# 1. 在项目根目录启动基础服务
+docker compose up -d mysql redis
 
 # 2. 初始化数据库
-mysql -u root -p agi_platform < scripts/migrations/001_create_tables.sql
-mysql -u root -p agi_platform < scripts/seeds/seed.sql
+mysql -u root -p agi_platform < backend/scripts/migrations/001_create_tables.sql
+mysql -u root -p agi_platform < backend/scripts/seeds/seed.sql
 
 # 3. 启动服务
-./bin/api        # API服务
-./bin/worker     # Worker服务
+cd backend
+go run ./cmd/api        # API 服务
+go run ./cmd/worker     # Worker 服务（另开终端）
 ```
 
 #### 启动管理后台
@@ -77,9 +76,9 @@ pnpm dev
 
 | 服务 | 地址 | 说明 |
 |------|------|------|
-| 用户端 | http://localhost/ | 用户界面 |
-| 管理后台 | http://localhost/admin/ | 管理员界面 |
-| API 健康检查 | http://localhost/health | 服务状态 |
+| 用户端 | http://localhost:3012/ | 用户界面 |
+| 管理后台 | http://localhost:3012/admin/ | 管理员界面 |
+| API 健康检查 | http://localhost:3012/health | 服务状态 |
 
 ## 🔑 默认账号
 
@@ -87,40 +86,23 @@ pnpm dev
 - 用户名: `admin`
 - 密码: `admin123`
 
-## ✅ 已实现功能
-
-### 后端 API（21个接口）
-
-#### 用户端（17个）
-- **认证模块**: 注册、登录、验证码
-- **用户模块**: 获取/更新资料
-- **创作模块**: 创建图片/视频任务、查询模型、任务列表
-- **作品模块**: 发布作品、浏览、点赞、收藏
-
-#### 管理后台（4个）
-- **管理员登录**
-- **数据统计**: 用户数、任务数、作品数
-- **作品审核**: 待审核列表、审核操作
-
-### 管理后台前端（3个页面）
-- **登录页面**: 管理员认证
-- **数据统计**: 可视化看板
-- **作品审核**: 审核列表和操作
-
 ## 🎯 核心特性
 
 - ✅ 完整的用户认证系统
 - ✅ AI 创作任务管理
 - ✅ Worker 异步处理
 - ✅ 作品社区（点赞/收藏）
-- ✅ 管理后台（数据统计/作品审核）
+- ✅ 灵感值、兑换码与充值套餐
+- ✅ 管理后台（用户、权限、审核、配置与日志）
 - ✅ Docker 一键部署
 
 ## 📖 详细文档
 
 - [Docker 启动指南](./DOCKER_START.md) - 详细的 Docker 使用说明
+- [版本发布指南](./VERSION.md) - 版本号、GitHub Release 与镜像发布规则
 - [后端文档](./backend/README.md) - 后端 API 详细文档
 - [管理后台文档](./admin/README.md) - 管理后台前端文档
+- [历史文档归档](./docs/archive/README.md) - 既往迁移与修复记录，仅供追溯
 
 ## 🛠️ 技术栈
 
@@ -172,27 +154,26 @@ pnpm build
 
 ### 端口被占用
 ```bash
-# 修改 .env 文件中的端口配置
+# 修改 .env 文件中的部署端口配置
 HTTP_PORT=3012
 ```
 
 ### 数据库连接失败
 ```bash
 # 检查 MySQL 是否启动
-docker-compose ps mysql
+docker compose ps mysql
 
 # 查看日志
-docker-compose logs mysql
+docker compose logs mysql
 ```
 
 ### 查看服务日志
 ```bash
 # 查看所有日志
-docker-compose logs -f
+docker compose logs -f
 
 # 查看特定服务
-docker-compose logs -f backend
-docker-compose logs -f worker
+docker compose logs -f app
 ```
 
 ## 📄 License

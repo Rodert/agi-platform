@@ -177,10 +177,10 @@ else
     warning "Dockerfile 不存在"
 fi
 
-if [ -f "docker-compose.yml" ]; then
-    success "docker-compose.yml 存在"
+if [ -f "../docker-compose.yml" ]; then
+    success "../docker-compose.yml 存在"
 else
-    warning "docker-compose.yml 不存在"
+    warning "../docker-compose.yml 不存在"
 fi
 
 # 总结
@@ -191,9 +191,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 echo "📋 下一步操作："
 echo "1. 配置环境变量: cp .env.example .env && vi .env"
-echo "2. 启动数据库: docker-compose up -d mysql redis"
+echo "2. 启动数据库: (cd .. && docker compose up -d mysql redis)"
 echo "3. 执行迁移: mysql -u root -p agi_platform < scripts/migrations/001_create_tables.sql"
 echo "4. 导入种子数据: mysql -u root -p agi_platform < scripts/seeds/seed.sql"
 echo "5. 启动服务: make dev 或 go run cmd/api/main.go"
 echo ""
-echo "📖 更多信息请查看: README.md 和 PROJECT_SUMMARY.md"
+echo "📖 更多信息请查看: ../README.md、../DOCKER_START.md 和 ../VERSION.md"

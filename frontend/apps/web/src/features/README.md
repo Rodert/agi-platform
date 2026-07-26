@@ -9,7 +9,7 @@ Each folder owns one user-facing capability. Keep feature-specific UI, data and 
 - `community/`: community dialog and community-specific behavior.
 - `notifications/`: notification list and drawer.
 
-Shared application shell code stays in `components/AppLayout.tsx`. Cross-feature mock state currently stays in `store/AppStore.tsx` until the backend API is introduced. Feature `index.ts` files define the public imports used by routes and other features.
+Shared application shell code stays in `components/AppLayout.tsx`. Cross-feature UI and application state stays in `store/AppStore.tsx`; individual views may retain local fallback data where the corresponding API has not yet been wired. Feature `index.ts` files define the public imports used by routes and other features.
 
 When adding a feature:
 
