@@ -54,4 +54,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
-          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --title "v$VERSION" --generate-notes
+          gh release view "v$VERSION" >/dev/null 2>&1 || gh release create "v$VERSION" --title "AGI-PLATFORM v$VERSION" --notes-file VERSION_RELEASE_NOTES.md
