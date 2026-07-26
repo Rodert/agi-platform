@@ -21,6 +21,7 @@ type ImageProcessor struct {
 	aiModelRepo      *repository.AIModelRepository
 	channelModelRepo *repository.ChannelModelRepository
 	assetRepo        *repository.MediaAssetRepository
+	creditRepo       *repository.CreditRepository
 	storageManager   *objectstorage.Manager
 }
 
@@ -29,6 +30,7 @@ func NewImageProcessor(
 	aiModelRepo *repository.AIModelRepository,
 	channelModelRepo *repository.ChannelModelRepository,
 	assetRepo *repository.MediaAssetRepository,
+	creditRepo *repository.CreditRepository,
 	storageManager *objectstorage.Manager,
 ) *ImageProcessor {
 	return &ImageProcessor{
@@ -36,6 +38,7 @@ func NewImageProcessor(
 		aiModelRepo:      aiModelRepo,
 		channelModelRepo: channelModelRepo,
 		assetRepo:        assetRepo,
+		creditRepo:       creditRepo,
 		storageManager:   storageManager,
 	}
 }
@@ -195,10 +198,17 @@ func (p *ImageProcessor) failTask(task *model.Task, attempt *model.TaskAttempt, 
 	task.ErrorMsg = errorMsg
 	task.UpdatedAt = now
 	task.CompletedAt = &now
-	p.taskRepo.Update(task)
+	if err := p.taskRepo.Update(task); err != nil {
+		return fmt.Errorf("更新任务失败状态失败: %w", err)
+	}
 	if attempt != nil {
 		if err := p.taskRepo.CompleteAttempt(attempt, "failed", errorMsg); err != nil {
 			logger.Error("记录任务执行失败状态失败", zap.Error(err))
+		}
+	}
+	if task.AttemptCount > task.MaxRetryAttempts {
+		if err := p.creditRepo.RefundFailedTask(task); err != nil {
+			logger.Error("返还失败任务灵感值失败", zap.Int64("task_id", task.ID), zap.Error(err))
 		}
 	}
 

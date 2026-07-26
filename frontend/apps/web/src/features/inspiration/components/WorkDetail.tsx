@@ -4,13 +4,12 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../../store/AppStore'
 import type { Work } from '../../../types'
-import { useCreateFromWork } from '../useCreateFromWork'
 
 export function WorkDetail({work,onClose}:{work:Work|null;onClose:()=>void}){
- const {toggleLike,requireAuth}=useApp(),nav=useNavigate(),[msg,ctx]=message.useMessage(),createFromWork=useCreateFromWork()
+ const {toggleLike,requireAuth}=useApp(),nav=useNavigate(),[msg,ctx]=message.useMessage()
  useEffect(()=>{if(!work)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')onClose()};document.body.style.overflow='hidden';window.addEventListener('keydown',close);return()=>{document.body.style.overflow='';window.removeEventListener('keydown',close)}},[work,onClose])
  if(!work)return null
- const go=(reference=false)=>{if(reference){if(!requireAuth())return;onClose();nav(`/create?prompt=${encodeURIComponent(work.prompt)}&reference=1`);return}void createFromWork(work,onClose)}
+ const go=(reference=false)=>{if(reference){if(!requireAuth())return;onClose();nav(`/create?prompt=${encodeURIComponent(work.prompt)}&reference=1`);return}onClose();nav(`/?prompt=${encodeURIComponent(work.prompt)}&mode=${work.type}`)}
  const copy=async()=>{await navigator.clipboard?.writeText(work.prompt);msg.success('提示词已复制')}
  const media=work.type==='video'?work.video_url||'':work.image_url||'',author=work.user?.name||'用户'
  return <div className="work-detail-overlay" role="dialog" aria-modal="true" aria-label="作品详情">{ctx}

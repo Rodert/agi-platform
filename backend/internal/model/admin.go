@@ -38,6 +38,7 @@ type AdminLog struct {
 	Description string   `gorm:"size:500" json:"description"`
 	IP         string    `gorm:"size:50" json:"ip"`
 	CreatedAt  time.Time `gorm:"not null;index" json:"created_at"`
+	Admin      *AdminUser `gorm:"foreignKey:AdminID" json:"admin,omitempty"`
 }
 
 func (AdminLog) TableName() string {

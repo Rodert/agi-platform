@@ -17,11 +17,11 @@ const modelLogos:Record<string,{src?:string;mark?:string;className:string}>={
 }
 const modelLabel=(label:string)=>{const logo=modelLogos[label];return <span className="model-option-label">{logo&&<i className={`model-logo ${logo.className}`}>{logo.src?<img src={logo.src} alt=""/>:logo.mark}</i>}<span>{label}</span></span>}
 
-export function GeneratePanel({onModeChange,refill}:{onModeChange?:(mode:CreationMode)=>void;refill?:{prompt:string;key:number}}={}){
+export function GeneratePanel({onModeChange,refill}:{onModeChange?:(mode:CreationMode)=>void;refill?:{prompt:string;key:string|number}}={}){
  const [queryParams]=useSearchParams(),navigate=useNavigate(),[prompt,setPrompt]=useState(''),[references,setReferences]=useState<string[]>([]),[model,setModel]=useState(''),[modelParams,setModelParams]=useState<Record<string,unknown>>({}),[optimizing,setOptimizing]=useState(false),[msg,ctx]=message.useMessage(),{createTask,requireAuth,models}=useApp()
  const imageModels=models.filter(item=>item.type==='image')
  useEffect(()=>{const p=queryParams.get('prompt');if(p)setPrompt(p)},[queryParams])
- useEffect(()=>{if(refill){setPrompt(refill.prompt);requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.generation-composer textarea')?.focus())}},[refill])
+ useEffect(()=>{if(refill){setPrompt(refill.prompt);requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.inspiration-generator-zone textarea, .generation-composer textarea')?.focus())}},[refill])
  useEffect(()=>{if(!model&&imageModels[0])setModel(imageModels[0].name)},[imageModels,model])
  const current=imageModels.find(x=>x.name===model)
  useEffect(()=>{setModelParams(modelParamDefaults(current))},[current])

@@ -1,0 +1,20 @@
+.publish-work-modal .ant-modal-body { padding-top: 6px; }
+.publish-work-form { display: grid; gap: 20px; }
+.publish-work-label { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+.publish-work-task-list { display: grid; max-height: 276px; gap: 8px; overflow-y: auto; padding-right: 2px; }
+.publish-work-task { display: grid; grid-template-columns: 62px minmax(0, 1fr) 16px; align-items: center; gap: 10px; width: 100%; min-height: 70px; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); color: var(--text); text-align: left; cursor: pointer; transition: border-color .16s ease, background .16s ease; }
+.publish-work-task:hover { border-color: var(--accent-line); background: var(--surface-2); }
+.publish-work-task.is-selected { border-color: var(--accent-line); background: var(--accent-soft); }
+.publish-work-task-locked { grid-template-columns: 62px minmax(0, 1fr); cursor: default; }
+.publish-work-preview { display: grid; width: 62px; height: 56px; place-items: center; overflow: hidden; border-radius: 5px; background: var(--control); color: var(--accent); font-size: 22px; }
+.publish-work-preview img { width: 100%; height: 100%; object-fit: cover; }
+.publish-work-task-copy { display: grid; min-width: 0; gap: 5px; }
+.publish-work-task-copy b, .publish-work-task-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.publish-work-task-copy b { color: var(--text); font-size: 13px; font-weight: 600; }
+.publish-work-task-copy small { color: var(--muted); font-size: 11px; }
+.publish-work-radio { width: 16px; height: 16px; border: 1px solid var(--muted); border-radius: 50%; }
+.publish-work-task.is-selected .publish-work-radio { border: 5px solid var(--accent); }
+.publish-work-fields { display: grid; grid-template-columns: minmax(0, 1fr) 168px; gap: 12px; }
+.publish-work-fields .ant-select { width: 100%; }
+.publish-work-empty { padding: 28px 12px; color: var(--muted); line-height: 1.8; text-align: center; }
+@media (max-width: 560px) { .publish-work-fields { grid-template-columns: 1fr; gap: 14px; } }

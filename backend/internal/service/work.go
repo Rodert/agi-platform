@@ -134,6 +134,25 @@ func (s *WorkService) GetWorkList(req *dto.WorkListRequest, userID int64) ([]*dt
 	return responses, total, nil
 }
 
+func (s *WorkService) GetMyWorkList(userID int64, page, pageSize int) ([]*dto.WorkResponse, int64, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	works, total, err := s.workRepo.FindUserList(userID, page, pageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	responses := make([]*dto.WorkResponse, len(works))
+	for index, work := range works {
+		responses[index] = s.workToResponse(work, userID)
+		responses[index].User = &dto.UserInfo{ID: userID}
+	}
+	return responses, total, nil
+}
+
 // LikeWork 点赞作品
 func (s *WorkService) LikeWork(userID, workID int64) error {
 	// 检查作品是否存在

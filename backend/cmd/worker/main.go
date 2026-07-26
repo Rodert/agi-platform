@@ -53,10 +53,11 @@ func main() {
 	storageConfigRepo := repository.NewStorageConfigRepository(database.DB)
 	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)
 	mediaAssetRepo := repository.NewMediaAssetRepository(database.DB)
+	creditRepo := repository.NewCreditRepository(database.DB)
 	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
 
 	// 创建 Processor
-	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo, channelModelRepo, mediaAssetRepo, objectStorageManager)
+	imageProcessor := worker.NewImageProcessor(taskRepo, aiModelRepo, channelModelRepo, mediaAssetRepo, creditRepo, objectStorageManager)
 	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
 
 	// Redis stream entries that were in-flight during a restart are not claimed

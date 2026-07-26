@@ -1,256 +1,116 @@
-# 🚀 AGI Platform - 一键启动指南
+# Docker 使用指南
 
-## 快速启动（推荐）
+项目提供两套 Compose 配置：
 
-### 方式 1：使用启动脚本（最简单）
+| 文件 | 适用场景 | 服务形态 |
+| --- | --- | --- |
+| `docker-compose.yml` | 部署 | 单个发布镜像 + MySQL + Redis |
+| `docker-compose.local.yml` | 本地开发 | 源码热更新的 API、Worker、用户端、管理端 + MySQL + Redis |
+
+## 本地调试
 
 ```bash
-# 一键启动所有服务
-./start.sh
+docker compose -f docker-compose.local.yml up
 ```
 
-### 方式 2：使用 Docker Compose
+首次启动会下载依赖，后续会复用 Docker 卷中的依赖缓存。本地调试也通过单个网关入口访问：
+
+| 服务 | 地址 |
+| --- | --- |
+| 用户端 | `http://localhost:3100/` |
+| 管理后台 | `http://localhost:3100/admin/` |
+| API 健康检查 | `http://localhost:3100/health` |
+
+MySQL、Redis、API、用户端和管理端只在 Docker 内部网络开放；前端、管理端通过本地网关访问 API。修改前端源码会热更新，修改 Go 源码后重启对应服务即可：
 
 ```bash
-# 1. 复制环境变量配置
+docker compose -f docker-compose.local.yml restart api worker
+```
+
+停止本地调试环境：
+
+```bash
+docker compose -f docker-compose.local.yml down
+```
+
+本地调试数据独立保存在 `agi-platform-local_*` 卷中。需要完全重置时才执行 `docker compose -f docker-compose.local.yml down -v`。
+
+# Docker 部署指南
+
+项目以 3 个容器运行：
+
+| 容器 | 镜像 | 职责 |
+| --- | --- | --- |
+| `app` | `agi-platform` | 用户端、管理端、Go API 与 Worker |
+| `mysql` | `mysql:8.0` | 数据库 |
+| `redis` | `redis:7-alpine` | 缓存和任务队列 |
+
+应用镜像中的统一入口：
+
+| 地址 | 服务 |
+| --- | --- |
+| `http://<host>/` | 用户端 |
+| `http://<host>/admin/` | 管理后台 |
+| `http://<host>/health` | API 健康检查 |
+
+## 首次部署
+
+```bash
 cp .env.example .env
-
-# 2. 启动所有服务
-docker-compose up -d --build
-
-# 3. 查看服务状态
-docker-compose ps
-
-# 4. 查看日志
-docker-compose logs -f
 ```
 
----
-
-## 📊 服务访问地址
-
-| 服务 | 地址 | 说明 |
-|------|------|------|
-| **后端 API** | http://localhost:8080 | API 接口 |
-| **管理后台** | http://localhost:3001 | 管理员后台 |
-| **MinIO 控制台** | http://localhost:9001 | 对象存储管理 |
-| **MySQL** | localhost:3306 | 数据库 |
-| **Redis** | localhost:6379 | 缓存 |
-
----
-
-## 🔑 默认账号
-
-### 管理员
-- 用户名: `admin`
-- 密码: `admin123`
-
-### MinIO
-- Access Key: `minioadmin`
-- Secret Key: `minioadmin123`
-
-### MySQL
-- Root 密码: `root123456`
-- 用户: `agi`
-- 密码: `agi123456`
-
----
-
-## 📦 包含的服务
-
-```
-┌─────────────────────────────────────────┐
-│  AGI Platform 服务架构                   │
-├─────────────────────────────────────────┤
-│                                          │
-│  ┌──────────┐  ┌──────────┐            │
-│  │  管理后台  │  │  后端API  │            │
-│  │  :3001   │──│  :8080   │            │
-│  └──────────┘  └──────────┘            │
-│                     │                   │
-│       ┌─────────────┼─────────────┐    │
-│       │             │             │    │
-│  ┌────▼────┐  ┌────▼────┐  ┌────▼────┐│
-│  │  MySQL  │  │  Redis  │  │  MinIO  ││
-│  │  :3306  │  │  :6379  │  │  :9000  ││
-│  └─────────┘  └─────────┘  └─────────┘│
-│                                          │
-│  ┌──────────┐                           │
-│  │  Worker  │  (后台任务处理)            │
-│  └──────────┘                           │
-│                                          │
-└─────────────────────────────────────────┘
-```
-
----
-
-## 🛠️ 常用命令
-
-### 启动服务
-```bash
-docker-compose up -d
-```
-
-### 停止服务
-```bash
-docker-compose down
-```
-
-### 重启服务
-```bash
-docker-compose restart
-```
-
-### 查看服务状态
-```bash
-docker-compose ps
-```
-
-### 查看日志
-```bash
-# 查看所有服务日志
-docker-compose logs -f
-
-# 查看特定服务日志
-docker-compose logs -f backend
-docker-compose logs -f worker
-docker-compose logs -f admin
-```
-
-### 进入容器
-```bash
-# 进入后端容器
-docker-compose exec backend sh
-
-# 进入数据库容器
-docker-compose exec mysql bash
-```
-
-### 清理数据（危险操作）
-```bash
-# 停止并删除所有容器和数据卷
-docker-compose down -v
-```
-
----
-
-## 🔧 自定义配置
-
-### 修改端口
-
-编辑 `.env` 文件：
+编辑 `.env`，替换以下值为随机强密码：
 
 ```env
-API_PORT=8080        # 后端 API 端口
-ADMIN_PORT=3001      # 管理后台端口
-MYSQL_PORT=3306      # MySQL 端口
-REDIS_PORT=6379      # Redis 端口
+MYSQL_ROOT_PASSWORD=...
+MYSQL_PASSWORD=...
+JWT_SECRET=...
 ```
 
-### 修改密码
+本机构建并启动：
 
-编辑 `.env` 文件：
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+首次创建 MySQL 数据卷时，容器会依次执行 `backend/scripts/migrations/` 中的迁移和种子数据。已有数据卷不会重复初始化。
+
+## GitHub 自动构建
+
+工作流 [docker-image.yml](./.github/workflows/docker-image.yml) 会在任意分支收到 `git push` 后构建并推送带提交 SHA 的应用镜像；默认分支额外更新 `latest`：
+
+```text
+ghcr.io/<GitHub 用户或组织>/agi-platform:latest
+ghcr.io/<GitHub 用户或组织>/agi-platform:sha-<完整提交 SHA>
+```
+
+GitHub 无法感知纯本地 `git commit`，因此必须推送：
+
+```bash
+git push origin <branch>
+```
+
+首次使用 GHCR 时，仓库的 Actions 必须具备 `packages: write` 权限；该工作流已经声明所需权限。服务器部署已发布的镜像时，在 `.env` 设置：
 
 ```env
-MYSQL_ROOT_PASSWORD=your_root_password
-MYSQL_PASSWORD=your_db_password
-MINIO_ROOT_USER=your_minio_user
-MINIO_ROOT_PASSWORD=your_minio_password
+APP_IMAGE=ghcr.io/<GitHub 用户或组织>/agi-platform:latest
 ```
 
----
-
-## 📖 初始化数据
-
-数据库会在首次启动时自动初始化。
-
-如需手动初始化：
+然后执行：
 
 ```bash
-# 进入 MySQL 容器
-docker-compose exec mysql bash
-
-# 执行 SQL
-mysql -u root -p agi_platform < /docker-entrypoint-initdb.d/001_create_tables.sql
+docker login ghcr.io
+docker compose pull app
+docker compose up -d
 ```
 
----
-
-## 🐛 故障排查
-
-### 服务启动失败
+## 日常运维
 
 ```bash
-# 查看服务日志
-docker-compose logs [服务名]
-
-# 检查端口占用
-lsof -i :[端口号]
+docker compose logs -f app
+docker compose restart app
+docker compose down
 ```
 
-### 数据库连接失败
-
-```bash
-# 检查 MySQL 是否启动
-docker-compose ps mysql
-
-# 查看 MySQL 日志
-docker-compose logs mysql
-```
-
-### 清理并重新启动
-
-```bash
-# 停止所有服务
-docker-compose down
-
-# 清理旧容器和镜像
-docker system prune -a
-
-# 重新构建并启动
-docker-compose up -d --build
-```
-
----
-
-## ✅ 验证服务
-
-### 1. 检查健康状态
-```bash
-# API 健康检查
-curl http://localhost:8080/health
-
-# 预期输出
-{"status":"ok","message":"服务运行正常"}
-```
-
-### 2. 访问管理后台
-浏览器打开：http://localhost:3001
-
-使用默认账号登录：`admin` / `admin123`
-
-### 3. 查看统计数据
-登录后会看到数据统计看板
-
----
-
-## 📝 注意事项
-
-1. **首次启动较慢** - 需要下载镜像和构建服务
-2. **数据持久化** - 数据存储在 Docker 卷中，停止服务不会丢失数据
-3. **端口冲突** - 确保所需端口未被占用
-4. **资源占用** - 建议至少 4GB 内存
-
----
-
-## 🎉 启动成功后
-
-访问 http://localhost:3001 即可使用管理后台！
-
-- 查看数据统计
-- 审核用户作品
-- 管理系统配置
-
----
-
-**祝你使用愉快！** 💪
+数据库、Redis 和上传文件分别位于 `mysql_data`、`redis_data`、`uploads_data` 具名卷。`docker compose down` 不会删除数据；`docker compose down -v` 会删除所有持久化数据。

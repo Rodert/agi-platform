@@ -41,10 +41,16 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('admin_info')
   }
 
+  const updateAdminInfo = (profile) => {
+    adminInfo.value = { ...adminInfo.value, ...profile }
+    localStorage.setItem('admin_info', JSON.stringify(adminInfo.value))
+  }
+
   return {
     token,
     adminInfo,
     login,
-    logout
+    logout,
+    updateAdminInfo
   }
 })

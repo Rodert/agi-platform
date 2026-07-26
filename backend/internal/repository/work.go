@@ -70,6 +70,19 @@ func (r *WorkRepository) FindList(category, workType string, userID int64, page,
 	return works, total, err
 }
 
+// FindUserList returns every lifecycle state for its owner. Unlike the public
+// feed, it intentionally includes pending and rejected submissions.
+func (r *WorkRepository) FindUserList(userID int64, page, pageSize int) ([]*model.Work, int64, error) {
+	var works []*model.Work
+	var total int64
+	query := r.db.Model(&model.Work{}).Where("user_id = ?", userID)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("created_at DESC, id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&works).Error
+	return works, total, err
+}
+
 // Update 更新作品
 func (r *WorkRepository) Update(work *model.Work) error {
 	return r.db.Save(work).Error
@@ -189,5 +202,21 @@ func (r *WorkRepository) FindPendingWorks(page, pageSize int) ([]*model.Work, in
 		Limit(pageSize).
 		Find(&works).Error
 
+	return works, total, err
+}
+
+// FindAdminList returns every work lifecycle state for administrative management.
+func (r *WorkRepository) FindAdminList(status string, page, pageSize int) ([]*model.Work, int64, error) {
+	var works []*model.Work
+	var total int64
+	query := r.db.Model(&model.Work{})
+	if status != "" {
+		query = query.Where("audit_status = ?", status)
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	offset := (page - 1) * pageSize
+	err := query.Order("updated_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&works).Error
 	return works, total, err
 }

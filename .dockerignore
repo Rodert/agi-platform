@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.pnpm-store
+**/node_modules
+**/dist
+**/.vite
+**/*.tsbuildinfo
+backend/bin
+backend/tmp
+uploads
+storage
+*.log

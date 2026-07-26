@@ -1,7 +1,10 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/javapub/agi-platform-backend/internal/dto"
@@ -21,6 +24,8 @@ type AuthService struct {
 	creditService  *CreditService
 	inviteService  *InvitationService
 	emailService   *EmailService
+	sessionRepo    *repository.UserSessionRepository
+	adminRepo      *repository.AdminRepository
 	jwtConfig      *config.JWTConfig
 	db             *gorm.DB
 }
@@ -32,6 +37,8 @@ func NewAuthService(
 	creditService *CreditService,
 	inviteService *InvitationService,
 	emailService *EmailService,
+	sessionRepo *repository.UserSessionRepository,
+	adminRepo *repository.AdminRepository,
 	jwtConfig *config.JWTConfig,
 	db *gorm.DB,
 ) *AuthService {
@@ -42,13 +49,15 @@ func NewAuthService(
 		creditService: creditService,
 		inviteService: inviteService,
 		emailService:  emailService,
+		sessionRepo: sessionRepo,
+		adminRepo:   adminRepo,
 		jwtConfig:     jwtConfig,
 		db:            db,
 	}
 }
 
 // Register 用户注册
-func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, error) {
+func (s *AuthService) Register(req *dto.RegisterRequest, device, ip string) (*dto.AuthResponse, error) {
 	// 1. 验证密码一致性
 	if req.Password != req.ConfirmPassword {
 		return nil, errors.New(errors.ErrCodeBadRequest, "两次输入的密码不一致")
@@ -63,9 +72,18 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 		return nil, errors.ErrUserExists
 	}
 
-	// 3. 验证验证码
-	if err := s.verifyCode(req.Email, req.Code, "register"); err != nil {
+	// 3. 根据用户默认设置决定是否要求邮箱验证码。
+	requireVerification, err := s.registerEmailVerificationRequired()
+	if err != nil {
 		return nil, err
+	}
+	if requireVerification {
+		if req.Code == "" {
+			return nil, errors.New(errors.ErrCodeBadRequest, "请输入邮箱验证码")
+		}
+		if err := s.verifyCode(req.Email, req.Code, "register"); err != nil {
+			return nil, err
+		}
 	}
 
 	// 4. 验证邀请码（如果有）
@@ -90,7 +108,13 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 		return nil, err
 	}
 
-	// 7. 开启事务
+	// 7. 读取新用户默认设置。缺省时赠送 5 灵感值。
+	defaults, err := s.userRegistrationDefaults()
+	if err != nil {
+		return nil, err
+	}
+
+	// 8. 开启事务
 	var user *model.User
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		// 创建用户
@@ -98,7 +122,8 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 			Email:        req.Email,
 			PasswordHash: passwordHash,
 			Name:         req.Email[:4] + "****", // 默认昵称
-			Level:        "free",
+			Avatar:       defaults.avatar,
+			Level:        defaults.level,
 			InviteCode:   inviteCode,
 			InvitedBy:    inviterID,
 			CreatedAt:    time.Now(),
@@ -109,8 +134,7 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 		}
 
 		// 创建积分账户并赠送新用户积分
-		newUserGift := 120 // 从配置读取
-		if err := s.creditService.CreateAccountWithTx(tx, user.ID, newUserGift); err != nil {
+		if err := s.creditService.CreateAccountWithTx(tx, user.ID, defaults.giftAmount); err != nil {
 			return err
 		}
 
@@ -128,8 +152,8 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 		return nil, err
 	}
 
-	// 8. 生成 Token
-	token, err := jwt.GenerateToken(user.ID, user.Email, s.jwtConfig)
+	// 9. 生成 Token
+	token, err := s.createSessionToken(user, device, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -147,8 +171,31 @@ func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, err
 	}, nil
 }
 
+type userRegistrationDefaults struct { giftAmount int; level, avatar string }
+
+func (s *AuthService) userRegistrationDefaults() (*userRegistrationDefaults, error) {
+	amountValue, err := s.configRepo.GetSystemConfigValue("new_user_gift_amount", "5")
+	if err != nil { return nil, err }
+	amount, err := strconv.Atoi(amountValue)
+	if err != nil || amount < 0 {
+		return nil, fmt.Errorf("invalid new_user_gift_amount configuration")
+	}
+	level, err := s.configRepo.GetSystemConfigValue("default_user_level", "free")
+	if err != nil { return nil, err }
+	if level != "free" && level != "member" && level != "pro" { return nil, fmt.Errorf("invalid default_user_level configuration") }
+	avatar, err := s.configRepo.GetSystemConfigValue("default_user_avatar", "")
+	if err != nil { return nil, err }
+	return &userRegistrationDefaults{giftAmount: amount, level: level, avatar: avatar}, nil
+}
+
+func (s *AuthService) registerEmailVerificationRequired() (bool, error) {
+	value, err := s.configRepo.GetSystemConfigValue("register_email_verification", "true")
+	if err != nil { return false, err }
+	return value == "true", nil
+}
+
 // Login 用户登录
-func (s *AuthService) Login(req *dto.LoginRequest) (*dto.AuthResponse, error) {
+func (s *AuthService) Login(req *dto.LoginRequest, device, ip string) (*dto.AuthResponse, error) {
 	// 1. 查找用户
 	user, err := s.userRepo.FindByEmail(req.Email)
 	if err != nil {
@@ -176,7 +223,7 @@ func (s *AuthService) Login(req *dto.LoginRequest) (*dto.AuthResponse, error) {
 	}
 
 	// 3. 生成 Token
-	token, err := jwt.GenerateToken(user.ID, user.Email, s.jwtConfig)
+	token, err := s.createSessionToken(user, device, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +241,16 @@ func (s *AuthService) Login(req *dto.LoginRequest) (*dto.AuthResponse, error) {
 	}, nil
 }
 
+func (s *AuthService) createSessionToken(user *model.User, device, ip string) (string, error) {
+	bytes := make([]byte, 24)
+	if _, err := rand.Read(bytes); err != nil { return "", err }
+	sessionID := hex.EncodeToString(bytes)
+	now := time.Now()
+	session := &model.UserSession{ID: sessionID, UserID: user.ID, Device: device, IP: ip, CreatedAt: now, UpdatedAt: now, ExpiresAt: now.Add(s.jwtConfig.GetExpiration())}
+	if err := s.sessionRepo.Create(session); err != nil { return "", err }
+	return jwt.GenerateToken(user.ID, user.Email, sessionID, s.jwtConfig)
+}
+
 // SendCode 发送验证码
 func (s *AuthService) SendCode(req *dto.SendCodeRequest) error {
 	// 1. 检查邮箱是否存在（注册时不应存在，登录时应存在）
@@ -205,39 +262,46 @@ func (s *AuthService) SendCode(req *dto.SendCodeRequest) error {
 	if req.Type == "register" && exists {
 		return errors.ErrUserExists
 	}
-	if req.Type == "login" && !exists {
+	if (req.Type == "login" || req.Type == "reset") && !exists {
 		return errors.ErrUserNotFound
 	}
 
-	// 2. 生成验证码
-	code := utils.GenerateCode()
-
-	// 3. 保存验证码
-	verifyCode := &model.VerificationCode{
-		Email:     req.Email,
-		Code:      code,
-		Type:      req.Type,
-		ExpiresAt: time.Now().Add(5 * time.Minute),
-		CreatedAt: time.Now(),
-	}
-	if err := s.codeRepo.Create(verifyCode); err != nil {
+	// 2. Re-send a still-valid code so a delayed earlier email does not become unusable.
+	verifyCode, err := s.codeRepo.FindActive(req.Email, req.Type)
+	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
+	if err == gorm.ErrRecordNotFound {
+		verifyCode = &model.VerificationCode{
+			Email:     req.Email,
+			Code:      utils.GenerateCode(),
+			Type:      req.Type,
+			ExpiresAt: time.Now().Add(5 * time.Minute),
+			CreatedAt: time.Now(),
+		}
+		if err := s.codeRepo.Create(verifyCode); err != nil {
+			return err
+		}
+	}
 
-	// 4. 发送邮件
-	if err := s.emailService.SendVerificationCode(req.Email, code); err != nil {
+	// 3. Send the email and retain the code in the administrator-only audit log.
+	if err := s.emailService.SendVerificationCode(req.Email, verifyCode.Code); err != nil {
+		s.recordVerificationEvent("send_verification_code_failed", req.Email, verifyCode.Code, req.Type, "邮箱验证码发送失败")
 		return err
 	}
+	s.recordVerificationEvent("send_verification_code", req.Email, verifyCode.Code, req.Type, "邮箱验证码已发送")
 
 	return nil
 }
 
 // verifyCode 验证验证码
 func (s *AuthService) verifyCode(email, code, codeType string) error {
-	// 1. 查找最新的验证码
-	verifyCode, err := s.codeRepo.FindLatest(email, codeType)
+	// 1. Match the submitted code among all usable codes. This tolerates email
+	// delivery ordering while every code remains valid for only five minutes.
+	verifyCode, err := s.codeRepo.FindMatchingActive(email, code, codeType)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
+			s.recordVerificationEvent("verify_verification_code_failed", email, code, codeType, "邮箱验证码校验失败")
 			return errors.ErrInvalidCode
 		}
 		return err
@@ -250,6 +314,7 @@ func (s *AuthService) verifyCode(email, code, codeType string) error {
 
 	// 3. 检查是否过期
 	if time.Now().After(verifyCode.ExpiresAt) {
+		s.recordVerificationEvent("verify_verification_code_failed", email, code, codeType, "邮箱验证码已过期")
 		return errors.ErrCodeExpired
 	}
 
@@ -257,8 +322,25 @@ func (s *AuthService) verifyCode(email, code, codeType string) error {
 	if err := s.codeRepo.MarkAsUsed(verifyCode.ID); err != nil {
 		return err
 	}
+	s.recordVerificationEvent("verify_verification_code", email, code, codeType, "邮箱验证码校验成功")
 
 	return nil
+}
+
+// recordVerificationEvent keeps public-account events visible to administrators.
+// AdminID 0 denotes a system-triggered event and has no foreign-key dependency.
+func (s *AuthService) recordVerificationEvent(action, email, code, codeType, description string) {
+	if s.adminRepo == nil {
+		return
+	}
+	_ = s.adminRepo.CreateLog(&model.AdminLog{
+		AdminID:     0,
+		Action:      action,
+		TargetType:  "email_verification",
+		Description: description,
+		AfterData:   fmt.Sprintf(`{"email":%q,"code":%q,"type":%q}`, email, code, codeType),
+		CreatedAt:   time.Now(),
+	})
 }
 
 // generateUniqueInviteCode 生成唯一的邀请码

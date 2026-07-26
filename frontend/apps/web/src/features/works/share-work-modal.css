@@ -1,0 +1,15 @@
+.share-work-modal .ant-modal-body { padding-top: 6px; }
+.share-poster { overflow: hidden; border: 1px solid #315a59; border-radius: 8px; background: #102326; color: #f4fbfa; }
+.share-poster-brand { display: flex; align-items: baseline; justify-content: space-between; padding: 15px 16px 12px; color: #a9e7df; font-size: 14px; font-weight: 700; }
+.share-poster-brand span { color: #78aaa6; font-size: 9px; font-weight: 600; }
+.share-poster-media { display: grid; width: calc(100% - 32px); aspect-ratio: 1 / .82; margin: 0 16px; place-items: center; overflow: hidden; border-radius: 4px; background: #0b1718; color: #a9e7df; font-size: 14px; }
+.share-poster-media img { width: 100%; height: 100%; object-fit: cover; }
+.share-poster-media span { display: grid; gap: 7px; place-items: center; }
+.share-poster-media .anticon { font-size: 28px; }
+.share-poster-caption { display: grid; gap: 4px; padding: 13px 16px 16px; }
+.share-poster-caption b { overflow: hidden; color: #fff; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.share-poster-caption span { color: #9fc4c0; font-size: 11px; }
+.share-poster-footer { display: grid; grid-template-columns: 68px minmax(0, 1fr); align-items: center; gap: 12px; padding: 14px 16px; border-top: 1px solid rgba(214, 255, 248, .17); background: #edf5f3; color: #102326; }
+.share-poster-footer b, .share-poster-footer span { display: block; }
+.share-poster-footer b { font-size: 13px; }
+.share-poster-footer span { margin-top: 3px; overflow: hidden; color: #547370; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

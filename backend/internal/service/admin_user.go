@@ -56,10 +56,11 @@ func (s *AdminService) RechargeUserCredit(adminID, userID int64, req *dto.AdminR
 		}
 		account.UpdatedAt = time.Now()
 		if err := tx.Save(&account).Error; err != nil { return err }
-		if err := tx.Create(&model.CreditLedger{UserID: userID, Type: ledgerType, Amount: req.Amount, Title: title, SourceType: sourceType, SourceID: adminID, BalanceAfter: account.Balance, IdempotencyKey: "admin_adjustment_" + uuid.NewString(), CreatedAt: time.Now()}).Error; err != nil { return err }
+		ledgerTitle := title + "：" + req.Remark
+		if err := tx.Create(&model.CreditLedger{UserID: userID, Type: ledgerType, Amount: req.Amount, Title: ledgerTitle, SourceType: sourceType, SourceID: adminID, BalanceAfter: account.Balance, IdempotencyKey: "admin_adjustment_" + uuid.NewString(), CreatedAt: time.Now()}).Error; err != nil { return err }
 		beforeData, _ := json.Marshal(map[string]int{"balance": before})
 		afterData, _ := json.Marshal(map[string]interface{}{"balance": account.Balance, "type": req.Type, "amount": req.Amount, "remark": req.Remark})
-		if err := tx.Create(&model.AdminLog{AdminID: adminID, Action: "adjust_credit", TargetType: "user", TargetID: userID, BeforeData: string(beforeData), AfterData: string(afterData), Description: title + "：" + req.Remark, CreatedAt: time.Now()}).Error; err != nil { return err }
+		if err := tx.Create(&model.AdminLog{AdminID: adminID, Action: "adjust_credit", TargetType: "user", TargetID: userID, BeforeData: string(beforeData), AfterData: string(afterData), Description: ledgerTitle, CreatedAt: time.Now()}).Error; err != nil { return err }
 		result.Balance = account.Balance
 		return nil
 	})
@@ -67,8 +68,38 @@ func (s *AdminService) RechargeUserCredit(adminID, userID int64, req *dto.AdminR
 	return result, nil
 }
 
+// GetUserCreditLedgers returns the immutable credit history for one user.
+func (s *AdminService) GetUserCreditLedgers(userID int64, req *dto.AdminCreditLedgerListRequest) ([]*dto.AdminCreditLedgerResponse, int64, error) {
+	if _, err := s.userRepo.FindByID(userID); err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, 0, errors.ErrUserNotFound
+		}
+		return nil, 0, err
+	}
+	startAt, err := parseAdminLogTime(req.StartAt)
+	if err != nil { return nil, 0, err }
+	endAt, err := parseAdminLogTime(req.EndAt)
+	if err != nil { return nil, 0, err }
+	if startAt != nil && endAt != nil && endAt.Before(*startAt) {
+		return nil, 0, errors.New(errors.ErrCodeBadRequest, "结束时间不能早于开始时间")
+	}
+	ledgers, total, err := s.creditRepo.GetLedgers(userID, req.Type, req.SourceType, startAt, endAt, req.Page, req.PageSize)
+	if err != nil {
+		return nil, 0, err
+	}
+	items := make([]*dto.AdminCreditLedgerResponse, 0, len(ledgers))
+	for _, ledger := range ledgers {
+		items = append(items, &dto.AdminCreditLedgerResponse{
+			ID: ledger.ID, Type: ledger.Type, Amount: ledger.Amount, Title: ledger.Title,
+			SourceType: ledger.SourceType, SourceID: ledger.SourceID,
+			BalanceAfter: ledger.BalanceAfter, CreatedAt: ledger.CreatedAt.Format("2006-01-02 15:04:05"),
+		})
+	}
+	return items, total, nil
+}
+
 // CreateUser 创建用户。
-func (s *AdminService) CreateUser(req *dto.CreateUserRequest) error {
+func (s *AdminService) CreateUser(adminID int64, req *dto.CreateUserRequest) error {
 	exists, err := s.userRepo.ExistsByEmail(req.Email)
 	if err != nil {
 		return err
@@ -97,25 +128,26 @@ func (s *AdminService) CreateUser(req *dto.CreateUserRequest) error {
 		return errors.New(errors.ErrCodeInternalServer, "生成邀请码失败")
 	}
 	now := time.Now()
-	return s.userRepo.Create(&model.User{
+	user := &model.User{
 		Email: req.Email, PasswordHash: hashedPassword, Name: req.Username,
 		Level: "free", InviteCode: inviteCode, CreatedAt: now, UpdatedAt: now,
-	})
+	}
+	if err := s.userRepo.Create(user); err != nil {
+		return err
+	}
+	afterData, _ := json.Marshal(map[string]interface{}{"email": user.Email, "name": user.Name, "level": user.Level})
+	s.recordAudit(&model.AdminLog{AdminID: adminID, Action: "create_user", TargetType: "user", TargetID: user.ID, AfterData: string(afterData), Description: "创建用户", CreatedAt: time.Now()})
+	return nil
 }
 
-func (s *AdminService) UpdateUser(userID int64, req *dto.AdminUpdateUserRequest) error {
+func (s *AdminService) UpdateUser(adminID, userID int64, req *dto.AdminUpdateUserRequest) error {
 	user, err := s.userRepo.FindByID(userID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound { return errors.ErrUserNotFound }
 		return err
 	}
-	if req.Email != user.Email {
-		exists, err := s.userRepo.ExistsByEmailExceptID(req.Email, userID)
-		if err != nil { return err }
-		if exists { return errors.ErrUserExists }
-	}
+	beforeData, _ := json.Marshal(map[string]interface{}{"email": user.Email, "name": user.Name, "level": user.Level})
 	user.Name = req.Username
-	user.Email = req.Email
 	user.Level = req.Level
 	if req.Password != "" {
 		hash, err := utils.HashPassword(req.Password)
@@ -123,7 +155,12 @@ func (s *AdminService) UpdateUser(userID int64, req *dto.AdminUpdateUserRequest)
 		user.PasswordHash = hash
 	}
 	user.UpdatedAt = time.Now()
-	return s.userRepo.Update(user)
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+	afterData, _ := json.Marshal(map[string]interface{}{"email": user.Email, "name": user.Name, "level": user.Level, "password_changed": req.Password != ""})
+	s.recordAudit(&model.AdminLog{AdminID: adminID, Action: "update_user", TargetType: "user", TargetID: userID, BeforeData: string(beforeData), AfterData: string(afterData), Description: "更新用户", CreatedAt: time.Now()})
+	return nil
 }
 
 // UpdateUserStatus 当前用户表没有启停字段。

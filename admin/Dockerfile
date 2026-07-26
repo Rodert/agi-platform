@@ -1,16 +1,14 @@
 # 管理后台前端
-FROM node:18-alpine AS admin-builder
+FROM node:22-alpine AS admin-builder
 
 WORKDIR /app
 
-# 复制 package.json
-COPY package.json ./
+# 固定 pnpm 10，避免 Corepack 自动升级后拒绝 lockfile 中的构建脚本。
+RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
 
-# 安装 pnpm
-RUN npm install -g pnpm
-
-# 安装依赖
-RUN pnpm install
+# 先复制依赖描述，以便构建缓存生效
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 
 # 复制源码
 COPY . .
@@ -19,7 +17,7 @@ COPY . .
 RUN pnpm build
 
 # 运行阶段 - 使用 nginx
-FROM nginx:alpine
+FROM nginx:1.27-alpine
 
 # 复制构建产物
 COPY --from=admin-builder /app/dist /usr/share/nginx/html

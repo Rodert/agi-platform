@@ -30,22 +30,6 @@ services:
     networks:
       - agi-network
 
-  # MinIO 对象存储
-  minio:
-    image: minio/minio:latest
-    container_name: agi-minio
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    networks:
-      - agi-network
-
   # API 服务
   api:
     build:
@@ -62,13 +46,11 @@ services:
       - DB_NAME=agi_platform
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - STORAGE_ENDPOINT=minio:9000
     ports:
       - "8080:8080"
     depends_on:
       - mysql
       - redis
-      - minio
     networks:
       - agi-network
     restart: unless-stopped
@@ -89,11 +71,9 @@ services:
       - DB_NAME=agi_platform
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - STORAGE_ENDPOINT=minio:9000
     depends_on:
       - mysql
       - redis
-      - minio
     networks:
       - agi-network
     restart: unless-stopped
@@ -101,7 +81,6 @@ services:
 volumes:
   mysql_data:
   redis_data:
-  minio_data:
 
 networks:
   agi-network:

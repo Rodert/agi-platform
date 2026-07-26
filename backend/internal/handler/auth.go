@@ -33,7 +33,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	result, err := h.authService.Register(&req)
+	result, err := h.authService.Register(&req, c.GetHeader("User-Agent"), c.ClientIP())
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -57,7 +57,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	result, err := h.authService.Login(&req)
+	result, err := h.authService.Login(&req, c.GetHeader("User-Agent"), c.ClientIP())
 	if err != nil {
 		response.Error(c, err)
 		return

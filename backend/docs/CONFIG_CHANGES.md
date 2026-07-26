@@ -16,7 +16,7 @@
 - ✅ `database.*` - 数据库连接
 - ✅ `redis.*` - Redis 连接
 - ✅ `jwt.*` - JWT 密钥
-- ✅ `storage.*` - 对象存储（MinIO/OSS）
+- ✅ `storage.*` - 对象存储（本地存储 / Cloudflare R2）
 - ✅ `system.*` - 系统配置（上传限制、CORS等）
 - ✅ `worker.*` - Worker 配置
 

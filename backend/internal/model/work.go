@@ -16,7 +16,7 @@ type Work struct {
 	Ratio         string     `gorm:"size:10" json:"ratio"`
 	ImageURL      string     `gorm:"size:500" json:"image_url"`
 	VideoURL      string     `gorm:"size:500" json:"video_url"`
-	AuditStatus   string     `gorm:"size:20;not null;default:pending;index" json:"audit_status"` // pending/approved/rejected
+	AuditStatus   string     `gorm:"size:20;not null;default:pending;index" json:"audit_status"` // pending/approved/rejected/offline
 	AuditReason   string     `gorm:"size:500" json:"audit_reason"`
 	AuditAdminID  int64      `json:"audit_admin_id"`
 	AuditedAt     *time.Time `json:"audited_at"`
@@ -37,7 +37,7 @@ type WorkAudit struct {
 	ID         int64     `gorm:"primaryKey;autoIncrement" json:"id"`
 	WorkID     int64     `gorm:"not null;index" json:"work_id"`
 	AdminID    int64     `gorm:"not null;index" json:"admin_id"`
-	Status     string    `gorm:"size:20;not null" json:"status"` // approved/rejected
+	Status     string    `gorm:"size:20;not null" json:"status"` // approved/rejected/offline
 	Reason     string    `gorm:"size:500" json:"reason"`
 	AuditedAt  time.Time `gorm:"not null" json:"audited_at"`
 	CreatedAt  time.Time `gorm:"not null" json:"created_at"`

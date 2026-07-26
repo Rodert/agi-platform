@@ -119,11 +119,6 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 	// 6. 开启事务
 	var task *model.Task
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// 扣除积分
-		if err := s.deductCredit(tx, userID, cost, "图片生成"); err != nil {
-			return err
-		}
-
 		// 创建生成请求
 		genReq := &model.GenerationRequest{
 			UserID:    userID,
@@ -155,6 +150,9 @@ func (s *CreationService) CreateImageTask(userID int64, req *dto.CreateImageTask
 			UpdatedAt:        time.Now(),
 		}
 		if err := tx.Create(task).Error; err != nil {
+			return err
+		}
+		if err := s.deductCredit(tx, userID, task.ID, cost, "图片生成"); err != nil {
 			return err
 		}
 		if req.ReferenceImage != "" {
@@ -269,11 +267,6 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 	// 5. 开启事务创建任务
 	var task *model.Task
 	err = s.db.Transaction(func(tx *gorm.DB) error {
-		// 扣除积分
-		if err := s.deductCredit(tx, userID, cost, "视频生成"); err != nil {
-			return err
-		}
-
 		// 创建生成请求
 		genReq := &model.GenerationRequest{
 			UserID:    userID,
@@ -305,6 +298,9 @@ func (s *CreationService) CreateVideoTask(userID int64, req *dto.CreateVideoTask
 			UpdatedAt:        time.Now(),
 		}
 		if err := tx.Create(task).Error; err != nil {
+			return err
+		}
+		if err := s.deductCredit(tx, userID, task.ID, cost, "视频生成"); err != nil {
 			return err
 		}
 		for _, stored := range referenceAssets {
@@ -560,7 +556,7 @@ func (s *CreationService) checkConcurrentLimit(userID int64, maxConcurrent int) 
 }
 
 // deductCredit 扣除积分（事务中）
-func (s *CreationService) deductCredit(tx *gorm.DB, userID int64, amount int, title string) error {
+func (s *CreationService) deductCredit(tx *gorm.DB, userID, taskID int64, amount int, title string) error {
 	// 1. 获取账户（加锁）
 	account, err := s.creditRepo.GetAccountForUpdate(tx, userID)
 	if err != nil {
@@ -590,8 +586,9 @@ func (s *CreationService) deductCredit(tx *gorm.DB, userID int64, amount int, ti
 		Amount:         amount,
 		Title:          title,
 		SourceType:     "task",
+		SourceID:       taskID,
 		BalanceAfter:   account.Balance,
-		IdempotencyKey: fmt.Sprintf("task_expense_%d_%d", userID, time.Now().UnixNano()),
+		IdempotencyKey: fmt.Sprintf("task_expense_%d", taskID),
 		CreatedAt:      time.Now(),
 	}
 	return s.creditRepo.CreateLedger(tx, ledger)

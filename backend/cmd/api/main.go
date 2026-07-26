@@ -129,6 +129,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	// Repository
 	userRepo := repository.NewUserRepository(database.DB)
 	codeRepo := repository.NewVerificationCodeRepository(database.DB)
+	sessionRepo := repository.NewUserSessionRepository(database.DB)
 	configRepo := repository.NewConfigRepository(database.DB)
 	taskRepo := repository.NewTaskRepository(database.DB)
 	requestRepo := repository.NewGenerationRequestRepository(database.DB)
@@ -136,6 +137,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	providerAccountRepo := repository.NewAIProviderAccountRepository(database.DB)
 	channelModelRepo := repository.NewChannelModelRepository(database.DB)
 	creditRepo := repository.NewCreditRepository(database.DB)
+	redeemCodeService := service.NewRedeemCodeService(database.DB, creditRepo)
 
 	adminRepo := repository.NewAdminRepository(database.DB)
 	workRepo := repository.NewWorkRepository(database.DB)
@@ -154,8 +156,8 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	emailService := service.NewEmailService(configRepo)
 	objectStorageManager := objectstorage.NewManager(storageConfigRepo, resourcePolicyRepo)
 	storageService := service.NewStorageService(objectStorageManager)
-	authService := service.NewAuthService(userRepo, codeRepo, configRepo, creditService, inviteService, emailService, &cfg.JWT, database.DB)
-	userService := service.NewUserService(userRepo, creditRepo)
+	authService := service.NewAuthService(userRepo, codeRepo, configRepo, creditService, inviteService, emailService, sessionRepo, adminRepo, &cfg.JWT, database.DB)
+	userService := service.NewUserService(userRepo, creditRepo, codeRepo, sessionRepo)
 	creationService := service.NewCreationService(taskRepo, requestRepo, aiModelRepo, channelModelRepo, creditRepo, mediaAssetRepo, configRepo, storageService, queueProducer, database.DB)
 	adminService := service.NewAdminService(adminRepo, workRepo, taskRepo, userRepo, creditRepo, mediaAssetRepo, objectStorageManager, &cfg.JWT, database.DB)
 	workService := service.NewWorkService(workRepo, taskRepo, userRepo)
@@ -167,20 +169,20 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 
 	// Handler
 	authHandler := handler.NewAuthHandler(authService)
-	userHandler := handler.NewUserHandler(userService)
+	userHandler := handler.NewUserHandler(userService, redeemCodeService)
 	creationHandler := handler.NewCreationHandler(creationService)
-	adminHandler := handler.NewAdminHandler(adminService)
+	adminHandler := handler.NewAdminHandler(adminService, redeemCodeService)
 	workHandler := handler.NewWorkHandler(workService)
-	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, channelModelRepo, channelCatalogService, storageConfigService, resourcePolicyService, emailService)
+	adminConfigHandler := handler.NewAdminConfigHandler(configRepo, aiModelRepo, providerAccountRepo, channelModelRepo, channelCatalogService, storageConfigService, resourcePolicyService, emailService, adminRepo, redeemCodeService)
 	announcementHandler := handler.NewAnnouncementHandler(announcementService)
 	promptOptimizationHandler := handler.NewPromptOptimizationHandler(promptOptimizationService)
 
 	// 注册路由
-	registerRoutes(router, cfg, authHandler, userHandler, creationHandler, adminHandler, workHandler, adminConfigHandler, announcementHandler, promptOptimizationHandler)
+	registerRoutes(router, cfg, sessionRepo, authHandler, userHandler, creationHandler, adminHandler, workHandler, adminConfigHandler, announcementHandler, promptOptimizationHandler)
 }
 
 // registerRoutes 注册路由
-func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler.AuthHandler, userHandler *handler.UserHandler, creationHandler *handler.CreationHandler, adminHandler *handler.AdminHandler, workHandler *handler.WorkHandler, adminConfigHandler *handler.AdminConfigHandler, announcementHandler *handler.AnnouncementHandler, promptOptimizationHandler *handler.PromptOptimizationHandler) {
+func registerRoutes(router *gin.Engine, cfg *config.Config, sessionRepo *repository.UserSessionRepository, authHandler *handler.AuthHandler, userHandler *handler.UserHandler, creationHandler *handler.CreationHandler, adminHandler *handler.AdminHandler, workHandler *handler.WorkHandler, adminConfigHandler *handler.AdminConfigHandler, announcementHandler *handler.AnnouncementHandler, promptOptimizationHandler *handler.PromptOptimizationHandler) {
 	// API 路由组
 	apiV1 := router.Group("/api/v1")
 	{
@@ -194,24 +196,32 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		{
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", authHandler.Login)
-			auth.POST("/send-code", authHandler.SendCode)
+		auth.POST("/send-code", authHandler.SendCode)
+		auth.GET("/registration-settings", adminConfigHandler.GetPublicRegistrationSettings)
 		}
 
 		// 用户接口（需要登录）
 		users := apiV1.Group("/users")
-		users.Use(middleware.AuthMiddleware(&cfg.JWT))
+		users.Use(middleware.AuthMiddleware(&cfg.JWT, sessionRepo))
 		{
 			users.GET("/profile", userHandler.GetProfile)
 			users.PATCH("/profile", userHandler.UpdateProfile)
+			users.GET("/credits", userHandler.GetCreditLedgers)
+			users.POST("/redeem-codes", userHandler.RedeemCode)
+			users.POST("/phone", userHandler.BindPhone)
+			users.POST("/password", userHandler.ChangePassword)
+			users.GET("/sessions", userHandler.ListSessions)
+			users.DELETE("/sessions/:id", userHandler.RevokeSession)
 		}
 
 		// 模型列表公开，创建任务需要登录。
 		apiV1.GET("/generation/models", creationHandler.GetModels)
 		apiV1.GET("/announcements", announcementHandler.ListPublished)
+		apiV1.GET("/credit-packages", userHandler.GetCreditPackages)
 
 		// 创作接口（需要登录）
 		generation := apiV1.Group("/generation")
-		generation.Use(middleware.AuthMiddleware(&cfg.JWT))
+		generation.Use(middleware.AuthMiddleware(&cfg.JWT, sessionRepo))
 		{
 			generation.POST("/image", creationHandler.CreateImageTask)
 			generation.POST("/video", creationHandler.CreateVideoTask)
@@ -220,7 +230,7 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 
 		// 任务接口（需要登录）
 		tasks := apiV1.Group("/tasks")
-		tasks.Use(middleware.AuthMiddleware(&cfg.JWT))
+		tasks.Use(middleware.AuthMiddleware(&cfg.JWT, sessionRepo))
 		{
 			tasks.GET("", creationHandler.GetTaskList)
 			tasks.GET("/:id", creationHandler.GetTask)
@@ -235,8 +245,9 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 
 			// 需要登录的接口
 			worksAuth := works.Group("")
-			worksAuth.Use(middleware.AuthMiddleware(&cfg.JWT))
+			worksAuth.Use(middleware.AuthMiddleware(&cfg.JWT, sessionRepo))
 			{
+				worksAuth.GET("/mine", workHandler.GetMyWorkList)
 				// 发布作品
 				worksAuth.POST("", workHandler.PublishWork)
 
@@ -252,8 +263,6 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 			}
 		}
 
-		// TODO: 积分模块路由
-		// credits := apiV1.Group("/credits")
 	}
 
 	// 管理后台路由
@@ -272,11 +281,32 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		// 需要管理员登录的接口
 		adminV1.Use(middleware.AdminAuthMiddleware(&cfg.JWT))
 		{
+			adminV1.GET("/profile", adminHandler.GetProfile)
+			adminV1.PUT("/profile", adminHandler.UpdateProfile)
 			adminV1.GET("/stats", adminHandler.GetStats)
+			adminV1.GET("/logs", adminHandler.GetLogs)
+			adminV1.GET("/reports", adminHandler.GetReport)
+			databaseBrowser := adminV1.Group("/database")
+			databaseBrowser.Use(middleware.RequireRole("super_admin"))
+			{
+				databaseBrowser.GET("/tables", adminHandler.ListDatabaseTables)
+				databaseBrowser.GET("/tables/:table", adminHandler.GetDatabaseTable)
+			}
+			adminUsers := adminV1.Group("/admins")
+			adminUsers.Use(middleware.RequireRole("super_admin"))
+			{
+				adminUsers.GET("", adminHandler.ListAdmins)
+				adminUsers.POST("", adminHandler.CreateAdmin)
+				adminUsers.PUT("/:id", adminHandler.UpdateAdmin)
+			}
 			config := adminV1.Group("/config")
 			{
 				config.GET("/basic", adminConfigHandler.GetBasic)
 				config.PUT("/basic", adminConfigHandler.SaveBasic)
+				config.GET("/credit-packages", adminConfigHandler.GetCreditPackages)
+				config.PUT("/credit-packages", adminConfigHandler.SaveCreditPackages)
+				config.GET("/user-defaults", adminConfigHandler.GetUserDefaults)
+				config.PUT("/user-defaults", adminConfigHandler.SaveUserDefaults)
 				config.GET("/email", adminConfigHandler.GetEmail)
 				config.PUT("/email", adminConfigHandler.SaveEmail)
 				config.POST("/email/test", adminConfigHandler.TestEmail)
@@ -318,10 +348,17 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 			users := adminV1.Group("/users")
 			{
 				users.GET("", adminHandler.GetUserList)
-				users.POST("", adminHandler.CreateUser)
-				users.PUT("/:id", adminHandler.UpdateUser)
-				users.POST("/:id/credits", middleware.RequireRole("admin"), adminHandler.RechargeUserCredit)
+			users.POST("", adminHandler.CreateUser)
+			users.PUT("/:id", adminHandler.UpdateUser)
+			users.GET("/:id/credits", adminHandler.GetUserCreditLedgers)
+			users.POST("/:id/credits", middleware.RequireRole("admin"), adminHandler.RechargeUserCredit)
 				users.PUT("/:id/status", adminHandler.UpdateUserStatus)
+			}
+			redeemCodes := adminV1.Group("/redeem-codes")
+			redeemCodes.Use(middleware.RequireRole("admin"))
+			{
+				redeemCodes.GET("", adminHandler.ListRedeemCodes)
+				redeemCodes.POST("", adminHandler.CreateRedeemCodes)
 			}
 			tasks := adminV1.Group("/tasks")
 			{
@@ -340,8 +377,10 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, authHandler *handler
 		works := adminV1.Group("/works")
 		works.Use(middleware.AdminAuthMiddleware(&cfg.JWT))
 		{
+			works.GET("", adminHandler.GetWorks)
 			works.GET("/pending", adminHandler.GetPendingWorks)
 			works.POST("/:id/audit", adminHandler.AuditWork)
+			works.POST("/:id/status", adminHandler.UpdateWorkPublicationStatus)
 		}
 	}
 }

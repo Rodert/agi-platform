@@ -60,6 +60,7 @@ func (h *AdminConfigHandler) CreateChannel(c *gin.Context) {
 		return
 	}
 	row.APIKey = "******"
+	h.recordAudit(c, "create_channel", "channel", row.ID, "创建渠道", row)
 	response.Success(c, row)
 }
 
@@ -93,6 +94,7 @@ func (h *AdminConfigHandler) UpdateChannel(c *gin.Context) {
 		return
 	}
 	row.APIKey = "******"
+	h.recordAudit(c, "update_channel", "channel", row.ID, "更新渠道", row)
 	response.Success(c, row)
 }
 
@@ -105,6 +107,7 @@ func (h *AdminConfigHandler) DeleteChannel(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.recordAudit(c, "delete_channel", "channel", id, "删除渠道", nil)
 	response.Success(c, nil)
 }
 
@@ -121,6 +124,7 @@ func (h *AdminConfigHandler) SyncChannelModels(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.recordAudit(c, "sync_channel_models", "channel", id, "同步渠道模型", map[string]int{"count": len(bindings)})
 	response.Success(c, bindings)
 }
 
@@ -144,6 +148,7 @@ func (h *AdminConfigHandler) BindChannelModel(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.recordAudit(c, "bind_channel_model", "channel_model", binding.ID, "绑定渠道模型", binding)
 	response.Success(c, binding)
 }
 
@@ -167,6 +172,7 @@ func (h *AdminConfigHandler) UpdateChannelModelStatus(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	h.recordAudit(c, "update_channel_model_status", "channel_model", modelID, "更新渠道模型状态", req)
 	response.Success(c, nil)
 }
 

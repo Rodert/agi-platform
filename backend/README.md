@@ -9,7 +9,7 @@
 - **ORM**: GORM
 - **数据库**: MySQL 8.0+
 - **缓存**: Redis 7.0+
-- **对象存储**: MinIO / 阿里云 OSS / AWS S3
+- **对象存储**: 本地存储 / Cloudflare R2
 - **消息队列**: Redis Stream
 
 ## 功能模块
@@ -128,11 +128,8 @@ REDIS_PORT=6379
 # JWT
 JWT_SECRET=your-secret-key
 
-# 对象存储
-STORAGE_TYPE=minio
-STORAGE_ENDPOINT=localhost:9000
-STORAGE_ACCESS_KEY=minioadmin
-STORAGE_SECRET_KEY=minioadmin
+# 对象存储通过管理后台的系统配置管理
+# 支持本地存储与 Cloudflare R2
 ```
 
 ## 部署

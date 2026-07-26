@@ -22,24 +22,38 @@ agi-platform/
 
 ## 🚀 快速启动
 
-### 方式 1：Docker 一键启动（推荐）
+### 方式 1：Docker 部署
 
 ```bash
-# 启动所有服务（MySQL + Redis + MinIO + API + Worker + 管理后台）
+# 启动所有服务（单应用镜像 + MySQL + Redis）
 ./start.sh
 
 # 或使用 docker-compose
 docker-compose up -d --build
 ```
 
-### 方式 2：手动启动
+### 方式 2：Docker 本地调试
+
+本地调试环境会以源码启动 API、Worker、用户端和管理端，默认使用独立端口，不影响部署环境：
+
+```bash
+docker compose -f docker-compose.local.yml up
+```
+
+- 用户端: http://localhost:3100/
+- 管理后台: http://localhost:3100/admin/
+- API 健康检查: http://localhost:3100/health
+
+完整的本地调试和部署说明见 [DOCKER_START.md](./DOCKER_START.md)。
+
+### 方式 3：手动启动
 
 #### 启动后端
 ```bash
 cd backend
 
 # 1. 启动基础服务
-docker-compose up -d mysql redis minio
+docker-compose up -d mysql redis
 
 # 2. 初始化数据库
 mysql -u root -p agi_platform < scripts/migrations/001_create_tables.sql
@@ -61,19 +75,15 @@ pnpm dev
 
 | 服务 | 地址 | 说明 |
 |------|------|------|
-| 后端 API | http://localhost:8080 | RESTful API |
-| 管理后台 | http://localhost:3001 | 管理员界面 |
-| MinIO 控制台 | http://localhost:9001 | 对象存储管理 |
+| 用户端 | http://localhost/ | 用户界面 |
+| 管理后台 | http://localhost/admin/ | 管理员界面 |
+| API 健康检查 | http://localhost/health | 服务状态 |
 
 ## 🔑 默认账号
 
 ### 管理员
 - 用户名: `admin`
 - 密码: `admin123`
-
-### MinIO
-- Access Key: `minioadmin`
-- Secret Key: `minioadmin123`
 
 ## ✅ 已实现功能
 
@@ -117,7 +127,7 @@ pnpm dev
 - Gin Framework
 - MySQL 8.0
 - Redis 7.0
-- MinIO
+- Docker Compose
 
 ### 管理后台
 - Vue 3
@@ -161,8 +171,7 @@ pnpm build
 ### 端口被占用
 ```bash
 # 修改 .env 文件中的端口配置
-API_PORT=8080
-ADMIN_PORT=3001
+HTTP_PORT=8080
 ```
 
 ### 数据库连接失败

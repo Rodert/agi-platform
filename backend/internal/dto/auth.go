@@ -3,7 +3,7 @@ package dto
 // RegisterRequest 注册请求
 type RegisterRequest struct {
 	Email          string `json:"email" binding:"required,email"`
-	Code           string `json:"code" binding:"required,len=6"`
+	Code           string `json:"code" binding:"omitempty,len=6"`
 	Password       string `json:"password" binding:"required,min=8"`
 	ConfirmPassword string `json:"confirm_password" binding:"required"`
 	InviteCode     string `json:"invite_code"` // 可选

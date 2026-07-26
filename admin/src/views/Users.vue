@@ -1,16 +1,22 @@
 <template>
   <div class="user-management">
     <div class="header">
-      <h2>用户管理</h2>
-      <el-button type="primary" @click="handleAdd">添加用户</el-button>
+      <div>
+        <h2>用户管理</h2>
+        <p>查看用户资料、会员等级与灵感值余额。</p>
+      </div>
+      <div class="header-actions">
+        <el-button :loading="loading" @click="fetchUsers">刷新</el-button>
+        <el-button type="primary" @click="handleAdd">添加用户</el-button>
+      </div>
     </div>
 
     <el-form :inline="true" class="search-form">
       <el-form-item label="用户名">
-        <el-input v-model="searchForm.username" placeholder="请输入用户名" clearable />
+        <el-input v-model.trim="searchForm.username" placeholder="请输入用户名" clearable @keyup.enter="handleSearch" />
       </el-form-item>
       <el-form-item label="邮箱">
-        <el-input v-model="searchForm.email" placeholder="请输入邮箱" clearable />
+        <el-input v-model.trim="searchForm.email" placeholder="请输入邮箱" clearable @keyup.enter="handleSearch" />
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="handleSearch">搜索</el-button>
@@ -18,17 +24,20 @@
       </el-form-item>
     </el-form>
 
-    <el-table :data="users" style="width: 100%" v-loading="loading">
+    <el-table :data="users" style="width: 100%" v-loading="loading" empty-text="暂无用户数据">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="name" label="用户名" width="150" />
       <el-table-column prop="email" label="邮箱" width="200" />
       <el-table-column prop="level" label="会员等级" width="120" />
       <el-table-column prop="balance" label="灵感值" width="110" />
-      <el-table-column prop="created_at" label="注册时间" width="180" />
-      <el-table-column label="操作" fixed="right" width="160">
+      <el-table-column label="注册时间" width="180">
+        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" fixed="right" width="250">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="primary" plain @click="openRecharge(row)">调整灵感值</el-button>
+          <el-button size="small" link type="primary" @click="openCreditLedgers(row)">流水</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -43,13 +52,13 @@
       @current-change="handlePageChange"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑用户' : '添加用户'" width="500px">
-      <el-form :model="userForm" :rules="rules" ref="formRef" label-width="80px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑用户' : '添加用户'" width="500px" @closed="resetFormValidation">
+      <el-form ref="formRef" :model="userForm" :rules="rules" label-width="80px" @submit.prevent>
         <el-form-item label="用户名" prop="username">
           <el-input v-model="userForm.username" placeholder="请输入用户名" />
         </el-form-item>
         <el-form-item label="邮箱" prop="email">
-          <el-input v-model="userForm.email" placeholder="请输入邮箱" />
+          <el-input v-model="userForm.email" :disabled="Boolean(editingId)" :placeholder="editingId ? '' : '请输入邮箱'" />
         </el-form-item>
         <el-form-item label="会员等级" prop="level" v-if="editingId">
           <el-select v-model="userForm.level" style="width: 100%"><el-option label="免费用户" value="free"/><el-option label="会员" value="member"/><el-option label="专业会员" value="pro"/></el-select>
@@ -64,7 +73,7 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="rechargeDialog" title="调整灵感值" width="440px">
+    <el-dialog v-model="rechargeDialog" title="调整灵感值" width="440px" @closed="resetRechargeForm">
       <el-form :model="rechargeForm" label-width="90px">
         <el-form-item label="用户"><span>{{ rechargeUser?.name }}（{{ rechargeUser?.email }}）</span></el-form-item>
         <el-form-item label="调整方式"><el-radio-group v-model="rechargeForm.type"><el-radio value="add">增加</el-radio><el-radio value="deduct">扣减</el-radio></el-radio-group></el-form-item>
@@ -72,6 +81,25 @@
         <el-form-item label="调整备注" required><el-input v-model="rechargeForm.remark" maxlength="200" show-word-limit type="textarea" placeholder="例如：活动补偿、违规扣减" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="rechargeDialog = false">取消</el-button><el-button :type="rechargeForm.type === 'deduct' ? 'danger' : 'primary'" :loading="recharging" @click="submitRecharge">确认调整</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="ledgerDialog" :title="ledgerUser ? `${ledgerUser.name} 的灵感值流水` : '灵感值流水'" width="860px" @closed="resetLedgers">
+      <el-form :inline="true" class="ledger-filters">
+        <el-form-item label="方向"><el-select v-model="ledgerFilters.type" clearable placeholder="全部" class="ledger-select"><el-option label="收入" value="income" /><el-option label="支出" value="expense" /></el-select></el-form-item>
+        <el-form-item label="来源"><el-select v-model="ledgerFilters.source_type" clearable placeholder="全部" class="ledger-select"><el-option label="管理员增加" value="admin_adjustment_add" /><el-option label="管理员扣减" value="admin_adjustment_deduct" /><el-option label="生成任务" value="task" /><el-option label="提示词优化" value="prompt_optimization" /></el-select></el-form-item>
+        <el-form-item label="时间范围"><el-date-picker v-model="ledgerFilters.dateRange" type="datetimerange" range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
+        <el-form-item><el-button type="primary" @click="searchCreditLedgers">筛选</el-button><el-button @click="resetCreditLedgerFilters">重置</el-button></el-form-item>
+      </el-form>
+      <el-table :data="ledgers" v-loading="ledgerLoading" empty-text="暂无灵感值流水">
+        <el-table-column prop="id" label="流水 ID" width="90" />
+        <el-table-column label="方向" width="90"><template #default="{ row }"><el-tag :type="row.type === 'income' ? 'success' : 'danger'">{{ row.type === 'income' ? '收入' : '支出' }}</el-tag></template></el-table-column>
+        <el-table-column label="数量" width="90"><template #default="{ row }"><span :class="row.type === 'income' ? 'income' : 'expense'">{{ row.type === 'income' ? '+' : '-' }}{{ row.amount }}</span></template></el-table-column>
+        <el-table-column prop="balance_after" label="调整后余额" width="110" />
+        <el-table-column prop="title" label="说明" min-width="180" show-overflow-tooltip />
+        <el-table-column label="来源" min-width="150"><template #default="{ row }">{{ sourceText(row.source_type) }}<span v-if="row.source_id"> #{{ row.source_id }}</span></template></el-table-column>
+        <el-table-column prop="created_at" label="时间" width="180" />
+      </el-table>
+      <el-pagination v-model:current-page="ledgerPagination.page" v-model:page-size="ledgerPagination.pageSize" :total="ledgerPagination.total" layout="total, prev, pager, next" @current-change="fetchCreditLedgers" />
     </el-dialog>
   </div>
 </template>
@@ -101,6 +129,12 @@ const rechargeDialog = ref(false)
 const recharging = ref(false)
 const rechargeUser = ref(null)
 const rechargeForm = reactive({ type: 'add', amount: 100, remark: '' })
+const ledgerDialog = ref(false)
+const ledgerLoading = ref(false)
+const ledgerUser = ref(null)
+const ledgers = ref([])
+const ledgerPagination = reactive({ page: 1, pageSize: 20, total: 0 })
+const ledgerFilters = reactive({ type: '', source_type: '', dateRange: [] })
 const userForm = reactive({
   username: '',
   email: '',
@@ -136,8 +170,8 @@ const fetchUsers = async () => {
         ...searchForm.value
       }
     })
-    users.value = data.list || []
-    pagination.value.total = data.total || 0
+    users.value = data?.list || []
+    pagination.value.total = data?.total || 0
   } catch (error) {
     ElMessage.error('获取用户列表失败')
   } finally {
@@ -172,26 +206,34 @@ const handleAdd = () => {
 const handleSubmit = async () => {
   if (!formRef.value) return
 
-  await formRef.value.validate(async (valid) => {
-    if (!valid) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
 
-    submitting.value = true
-    try {
-      if (editingId.value) {
-        await request.put(`/users/${editingId.value}`, userForm)
-        ElMessage.success('用户信息已更新')
-      } else {
-        await request.post('/users', userForm)
-        ElMessage.success('创建用户成功')
+  submitting.value = true
+  try {
+    if (editingId.value) {
+      const payload = {
+        username: userForm.username,
+        level: userForm.level
       }
-      dialogVisible.value = false
-      fetchUsers()
-    } catch (error) {
-      // 错误已在拦截器中处理
-    } finally {
-      submitting.value = false
+      if (userForm.password) payload.password = userForm.password
+      await request.put(`/users/${editingId.value}`, payload)
+      ElMessage.success('用户信息已更新')
+    } else {
+      await request.post('/users', {
+        username: userForm.username,
+        email: userForm.email,
+        password: userForm.password
+      })
+      ElMessage.success('创建用户成功')
     }
-  })
+    dialogVisible.value = false
+    await fetchUsers()
+  } catch {
+    // 错误已在响应拦截器中提示。
+  } finally {
+    submitting.value = false
+  }
 }
 
 const handleEdit = (row) => {
@@ -206,27 +248,101 @@ const openRecharge = (row) => {
   rechargeDialog.value = true
 }
 
+const sourceText = (source) => ({
+  admin_adjustment_add: '管理员增加',
+  admin_adjustment_deduct: '管理员扣减',
+  task: '生成任务',
+  prompt_optimization: '提示词优化',
+  register: '注册赠送',
+  gift: '赠送',
+  recharge: '充值',
+  checkin: '签到',
+  redeem: '兑换'
+}[source] || source || '-')
+
+const openCreditLedgers = (row) => {
+  ledgerUser.value = row
+  ledgerPagination.page = 1
+  ledgerPagination.total = 0
+  Object.assign(ledgerFilters, { type: '', source_type: '', dateRange: [] })
+  ledgers.value = []
+  ledgerDialog.value = true
+  fetchCreditLedgers()
+}
+
+const fetchCreditLedgers = async () => {
+  if (!ledgerUser.value) return
+  ledgerLoading.value = true
+  try {
+    const data = await request.get(`/users/${ledgerUser.value.id}/credits`, { params: { page: ledgerPagination.page, page_size: ledgerPagination.pageSize, type: ledgerFilters.type, source_type: ledgerFilters.source_type, start_at: ledgerFilters.dateRange?.[0] || '', end_at: ledgerFilters.dateRange?.[1] || '' } })
+    ledgers.value = data.list || []
+    ledgerPagination.total = data.total || 0
+  } finally {
+    ledgerLoading.value = false
+  }
+}
+
+const searchCreditLedgers = () => {
+  ledgerPagination.page = 1
+  fetchCreditLedgers()
+}
+
+const resetCreditLedgerFilters = () => {
+  Object.assign(ledgerFilters, { type: '', source_type: '', dateRange: [] })
+  searchCreditLedgers()
+}
+
 const submitRecharge = async () => {
   if (!rechargeUser.value) return
   if (!rechargeForm.amount || rechargeForm.amount < 1) return ElMessage.warning('请输入有效充值数量')
   if (!rechargeForm.remark.trim()) return ElMessage.warning('请填写充值备注')
   recharging.value = true
   try {
-    const result = await request.post(`/users/${rechargeUser.value.id}/credits`, rechargeForm)
-    rechargeUser.value.balance = result.balance
+    await request.post(`/users/${rechargeUser.value.id}/credits`, {
+      type: rechargeForm.type,
+      amount: rechargeForm.amount,
+      remark: rechargeForm.remark.trim()
+    })
     rechargeDialog.value = false
     ElMessage.success(rechargeForm.type === 'deduct' ? '灵感值已扣减' : '灵感值已增加')
+    await fetchUsers()
   } finally {
     recharging.value = false
   }
 }
 
 const handleSizeChange = () => {
+  pagination.value.page = 1
   fetchUsers()
 }
 
 const handlePageChange = () => {
   fetchUsers()
+}
+
+const resetFormValidation = () => {
+  formRef.value?.clearValidate()
+}
+
+const resetRechargeForm = () => {
+  rechargeUser.value = null
+  Object.assign(rechargeForm, { type: 'add', amount: 100, remark: '' })
+}
+
+const resetLedgers = () => {
+  ledgerUser.value = null
+  ledgers.value = []
+  ledgerPagination.page = 1
+  ledgerPagination.total = 0
+  Object.assign(ledgerFilters, { type: '', source_type: '', dateRange: [] })
+}
+
+const formatDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const pad = (number) => String(number).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 onMounted(() => {
@@ -246,6 +362,21 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.header h2 {
+  margin: 0;
+}
+
+.header p {
+  margin: 6px 0 0;
+  color: #909399;
+  font-size: 13px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
 .search-form {
   margin-bottom: 20px;
 }
@@ -254,4 +385,8 @@ onMounted(() => {
   margin-top: 20px;
   justify-content: flex-end;
 }
+.income { color: #67c23a; font-weight: 600; }
+.expense { color: #f56c6c; font-weight: 600; }
+.ledger-filters { margin-bottom: 12px; }
+.ledger-select { width: 130px; }
 </style>

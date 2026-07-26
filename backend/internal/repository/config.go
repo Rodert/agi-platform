@@ -62,8 +62,22 @@ func (r *ConfigRepository) UpsertSystemConfig(key, value, configType, category, 
 		return err
 	}
 	config.Value = value
+	config.Type = configType
+	config.Category = category
+	config.Description = description
 	config.UpdatedAt = time.Now()
 	return r.db.Save(&config).Error
+}
+
+func (r *ConfigRepository) GetSystemConfigValue(key, fallback string) (string, error) {
+	config, err := r.GetSystemConfig(key)
+	if err == gorm.ErrRecordNotFound {
+		return fallback, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return config.Value, nil
 }
 
 // GetTaskConfig loads the singleton task policy. The fallback keeps older

@@ -8,7 +8,10 @@ SET NAMES utf8mb4;
 -- ----------------------------
 INSERT INTO `system_configs` (`key`, `value`, `type`, `category`, `description`) VALUES
 -- 积分配置
-('new_user_gift_amount', '120', 'int', 'credit', '新用户赠送灵感值'),
+('new_user_gift_amount', '5', 'int', 'user_defaults', '新用户注册礼包灵感值'),
+('default_user_level', 'free', 'string', 'user_defaults', '新用户默认等级'),
+('default_user_avatar', '', 'string', 'user_defaults', '新用户默认头像'),
+('register_email_verification', 'true', 'bool', 'user_defaults', '注册时是否需要邮箱验证码'),
 ('checkin_base_reward', '1', 'int', 'checkin', '签到基础奖励'),
 ('checkin_7day_reward', '3', 'int', 'checkin', '连续7天签到奖励'),
 

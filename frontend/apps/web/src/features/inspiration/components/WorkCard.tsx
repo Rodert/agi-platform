@@ -2,13 +2,12 @@ import { HeartFilled, HeartOutlined, StarFilled, StarOutlined } from '@ant-desig
 import type { Work } from '../../../types'
 import { useApp } from '../../../store/AppStore'
 import { useNavigate } from 'react-router-dom'
-import { useCreateFromWork } from '../useCreateFromWork'
 
 export function WorkCard({ work, onOpen }: { work: Work; onOpen: (w: Work) => void }) {
   const { toggleLike, toggleCollect } = useApp()
   const nav = useNavigate()
-  const createFromWork = useCreateFromWork()
   const media = work.type === 'video' ? work.video_url || '' : work.image_url || ''
+  const createSame = () => nav(`/?prompt=${encodeURIComponent(work.prompt)}&mode=${work.type}`)
 
   return <article className="work-card" onClick={() => onOpen(work)}>
     {work.type === 'video' ? <video src={media} poster={work.image_url} muted preload="metadata" /> : <img src={media} alt={work.title} />}
@@ -16,7 +15,7 @@ export function WorkCard({ work, onOpen }: { work: Work; onOpen: (w: Work) => vo
     <div className="work-overlay">
       <b>{work.title}</b>
       <div className="work-actions">
-        <button onClick={event => { event.stopPropagation(); void createFromWork(work) }}>做同款</button>
+        <button onClick={event => { event.stopPropagation(); createSame() }}>做同款</button>
         <button onClick={event => { event.stopPropagation(); nav(`/create?prompt=${encodeURIComponent(work.prompt)}`) }}>用作参考图</button>
       </div>
       <div className="work-meta">

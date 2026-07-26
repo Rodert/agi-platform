@@ -27,6 +27,18 @@ const routes = [
         meta: { title: '用户管理', icon: 'User' }
       },
       {
+        path: 'user-defaults',
+        name: 'UserDefaults',
+        component: () => import('@/views/UserDefaults.vue'),
+        meta: { title: '用户默认设置', icon: 'User' }
+      },
+      {
+        path: 'redeem-codes',
+        name: 'RedeemCodes',
+        component: () => import('@/views/RedeemCodes.vue'),
+        meta: { title: '兑换码管理', icon: 'Ticket' }
+      },
+      {
         path: 'works',
         name: 'Works',
         component: () => import('@/views/Works.vue'),
@@ -36,7 +48,7 @@ const routes = [
         path: 'tasks',
         name: 'Tasks',
         component: () => import('@/views/Tasks.vue'),
-        meta: { title: '生成记录', icon: 'List' }
+        meta: { title: '生成任务', icon: 'List' }
       },
       {
         path: 'announcements',
@@ -57,29 +69,69 @@ const routes = [
         meta: { title: '日志管理', icon: 'Document' }
       },
       {
+        path: 'database',
+        name: 'Database',
+        component: () => import('@/views/Database.vue'),
+        meta: { title: '数据管理', icon: 'Grid' }
+      },
+      {
         path: 'permissions',
         name: 'Permissions',
         component: () => import('@/views/Permissions.vue'),
-        meta: { title: '权限管理', icon: 'Lock' }
+        meta: { title: '管理员与权限', icon: 'Lock' }
       },
       {
         path: 'accounts',
         name: 'Accounts',
         component: () => import('@/views/Accounts.vue'),
-        meta: { title: '账号管理', icon: 'Key' }
+        meta: { title: '渠道与模型', icon: 'Key' }
       },
       {
         path: 'config',
-        name: 'Config',
+        redirect: '/platform-settings'
+      },
+      {
+        path: 'platform-settings',
+        name: 'PlatformSettings',
         component: () => import('@/views/Config.vue'),
-        meta: { title: '系统配置', icon: 'Setting' }
+        meta: { title: '站点与邮件', configTabs: ['basic', 'email'] }
+      },
+      {
+        path: 'credit-packages',
+        name: 'CreditPackages',
+        component: () => import('@/views/Config.vue'),
+        meta: { title: '充值套餐', configTabs: ['packages'] }
+      },
+      {
+        path: 'task-policy',
+        name: 'TaskPolicy',
+        component: () => import('@/views/Config.vue'),
+        meta: { title: '任务策略', configTabs: ['task'] }
+      },
+      {
+        path: 'prompt-optimization',
+        name: 'PromptOptimization',
+        component: () => import('@/views/Config.vue'),
+        meta: { title: '提示词优化', configTabs: ['prompt-optimization'] }
+      },
+      {
+        path: 'storage',
+        name: 'Storage',
+        component: () => import('@/views/Config.vue'),
+        meta: { title: '存储与资源', configTabs: ['storage', 'resources'] }
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/Profile.vue'),
+        meta: { title: '个人中心' }
       }
     ]
   }
 ]
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory('/admin/'),
   routes
 })
 

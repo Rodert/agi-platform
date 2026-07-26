@@ -75,6 +75,7 @@ type CreditPackage struct {
 	Price     float64   `gorm:"not null" json:"price"`
 	Points    int       `gorm:"not null" json:"points"`
 	Note      string    `gorm:"size:255" json:"note"`
+	PurchaseURL string  `gorm:"size:500" json:"purchase_url"`
 	IsHot     bool      `gorm:"default:false" json:"is_hot"`
 	SortOrder int       `gorm:"default:0" json:"sort_order"`
 	IsActive  bool      `gorm:"default:true" json:"is_active"`

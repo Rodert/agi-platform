@@ -9,9 +9,10 @@ import { ModelParams, modelParamCost, modelParamDefaults } from './ModelParams'
 import { ReferenceImagePicker } from './ReferenceImagePicker'
 import { apiClient } from '../../../utils/api'
 
-export function InlineVideoPanel({onModeChange}:{onModeChange:(mode:CreationMode)=>void}){
+export function InlineVideoPanel({onModeChange,refill}:{onModeChange:(mode:CreationMode)=>void;refill?:{prompt:string;key:string|number}}){
  const [prompt,setPrompt]=useState(''),navigate=useNavigate(),[references,setReferences]=useState<string[]>([]),[model,setModel]=useState(''),[modelParams,setModelParams]=useState<Record<string,unknown>>({}),[optimizing,setOptimizing]=useState(false),[msg,ctx]=message.useMessage(),{createTask,requireAuth,models}=useApp()
  const videoModels=models.filter(item=>item.type==='video'),current=videoModels.find(item=>item.name===model)||videoModels[0]
+ useEffect(()=>{if(refill){setPrompt(refill.prompt);requestAnimationFrame(()=>document.querySelector<HTMLTextAreaElement>('.inspiration-generator-zone textarea, .generation-composer textarea')?.focus())}},[refill])
  useEffect(()=>{setModelParams(modelParamDefaults(current))},[current])
  const optimize=async()=>{if(!requireAuth())return;if(!prompt.trim())return msg.warning('先输入提示词');if(!current)return msg.warning('请先选择视频模型');setOptimizing(true);try{const result=await apiClient.generation.optimizePrompt({prompt:prompt.trim(),target_type:'video',target_model_name:current.name,params:modelParams});setPrompt(result.prompt);msg.success(result.credit_cost>0?`提示词已优化，消耗 ${result.credit_cost} 灵感值`:'提示词已优化')}catch(error){msg.error(error instanceof Error?error.message:'提示词优化失败')}finally{setOptimizing(false)}}
  const submit=async()=>{if(!requireAuth())return;if(!prompt.trim())return msg.warning('请输入视频画面与运动描述');if(!current)return msg.error('暂无可用视频模型');if(await createTask({prompt:prompt.trim(),type:'video',modelName:current.name,params:modelParams,referenceImages:references})){setPrompt('');setReferences([]);navigate('/create')}else msg.error('任务提交失败')}

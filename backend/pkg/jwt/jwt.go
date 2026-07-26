@@ -12,6 +12,7 @@ import (
 type Claims struct {
 	UserID int64  `json:"user_id"`
 	Email  string `json:"email"`
+	SessionID string `json:"sid"`
 	jwt.RegisteredClaims
 }
 
@@ -24,13 +25,14 @@ type AdminClaims struct {
 }
 
 // GenerateToken 生成用户 Token
-func GenerateToken(userID int64, email string, cfg *config.JWTConfig) (string, error) {
+func GenerateToken(userID int64, email, sessionID string, cfg *config.JWTConfig) (string, error) {
 	now := time.Now()
 	expiresAt := now.Add(cfg.GetExpiration())
 
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
+		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 			IssuedAt:  jwt.NewNumericDate(now),

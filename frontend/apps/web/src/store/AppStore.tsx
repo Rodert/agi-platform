@@ -22,7 +22,8 @@ interface Store {
   tasks: Task[]
   models: AIModel[]
   ledger: Ledger[]
-  login: (email: string, password: string) => Promise<boolean>
+  authenticate: (input: { email: string; password?: string; code?: string; type: 'password' | 'code' }) => Promise<boolean>
+  register: (input: { email: string; password: string; confirm_password: string; code?: string }) => Promise<boolean>
   logout: () => void
   requireAuth: () => boolean
   toggleLike: (id: number) => Promise<void>
@@ -33,7 +34,8 @@ interface Store {
   checkIn: () => boolean
   redeem: () => boolean
   loadTasks: () => Promise<void>
-  loadWorks: () => Promise<void>
+	loadWorks: () => Promise<void>
+	refreshProfile: () => Promise<void>
 }
 
 const Context = createContext<Store | null>(null)
@@ -92,16 +94,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer)
   }, [loadTasks, tasks, user])
 
-  const login = async (email: string, password: string) => {
+  const completeAuthentication = async (result: { token: string }) => {
+    apiClient.setToken(result.token)
+    setAuthReady(false)
+    await Promise.all([loadUserProfile(), loadTasks(), loadWorks()])
+    setAuthReady(true)
+  }
+
+  const authenticate = async (input: { email: string; password?: string; code?: string; type: 'password' | 'code' }) => {
     try {
-      const result = await apiClient.auth.login({ email, password, type: 'password' })
-      apiClient.setToken(result.token)
-      setAuthReady(false)
-      await Promise.all([loadUserProfile(), loadTasks(), loadWorks()])
-      setAuthReady(true)
+      const result = await apiClient.auth.login(input)
+      await completeAuthentication(result)
       return true
     } catch (error) {
       console.error('登录失败:', error)
+      return false
+    }
+  }
+
+  const register = async (input: { email: string; password: string; confirm_password: string; code?: string }) => {
+    try {
+      const result = await apiClient.auth.register(input)
+      await completeAuthentication(result)
+      return true
+    } catch (error) {
+      console.error('注册失败:', error)
       return false
     }
   }
@@ -182,7 +199,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     tasks,
     models,
     ledger: [],
-    login,
+    authenticate,
+    register,
     logout,
     requireAuth,
     toggleLike,
@@ -193,7 +211,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkIn: () => false,
     redeem: () => false,
     loadTasks,
-    loadWorks,
+	loadWorks,
+	refreshProfile: loadUserProfile,
   }), [authReady, loadTasks, loadWorks, models, tasks, user, works])
 
   return <Context.Provider value={value}>{children}</Context.Provider>

@@ -1,4 +1,4 @@
-import type { User, Work, Task, AIModel, Announcement, PageResponse } from '../types'
+import type { User, Work, Task, AIModel, Announcement, Ledger, PageResponse, UserSession, CreditPackage } from '../types'
 
 // API配置
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
@@ -73,7 +73,7 @@ class APIClient {
       email: string
       password: string
       confirm_password: string
-      code: string
+      code?: string
       invite_code?: string
     }) =>
       this.request<{ token: string; user: User }>(
@@ -99,6 +99,8 @@ class APIClient {
         '/api/v1/auth/send-code',
         { method: 'POST', body: JSON.stringify(data) }
       ),
+
+    registrationSettings: () => this.request<{ register_email_verification: boolean }>('/api/v1/auth/registration-settings'),
   }
 
   // 用户API
@@ -113,7 +115,30 @@ class APIClient {
         '/api/v1/users/profile',
         { method: 'PATCH', body: JSON.stringify(data) }
       ),
+
+    bindPhone: (data: { phone: string; code: string }) =>
+      this.request<User>('/api/v1/users/phone', { method: 'POST', body: JSON.stringify(data) }),
+
+    changePassword: (data: { current_password: string; new_password: string }) =>
+      this.request<void>('/api/v1/users/password', { method: 'POST', body: JSON.stringify(data) }),
+
+    listSessions: () => this.request<UserSession[]>('/api/v1/users/sessions'),
+
+    revokeSession: (id: string) => this.request<void>(`/api/v1/users/sessions/${id}`, { method: 'DELETE' }),
+
+    getCreditLedgers: (params: { page?: number; page_size?: number } = {}) => {
+      const query = new URLSearchParams()
+      if (params.page) query.set('page', String(params.page))
+      if (params.page_size) query.set('page_size', String(params.page_size))
+      return this.request<PageResponse<Ledger>>(`/api/v1/users/credits?${query.toString()}`)
+    },
+
+    redeemCode: (code: string) => this.request<{ amount: number; balance: number }>('/api/v1/users/redeem-codes', {
+      method: 'POST', body: JSON.stringify({ code }),
+    }),
   }
+
+  creditPackages = () => this.request<CreditPackage[]>('/api/v1/credit-packages')
 
   // 创作API
   generation = {
@@ -236,6 +261,13 @@ class APIClient {
       return this.request<PageResponse<Work>>(
         `/api/v1/works?${query.toString()}`
       )
+    },
+
+    mine: (params: { page?: number; page_size?: number } = {}) => {
+      const query = new URLSearchParams()
+      if (params.page) query.set('page', String(params.page))
+      if (params.page_size) query.set('page_size', String(params.page_size))
+      return this.request<PageResponse<Work>>(`/api/v1/works/mine?${query.toString()}`)
     },
 
     // 获取作品详情

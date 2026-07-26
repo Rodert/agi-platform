@@ -25,7 +25,16 @@ export interface User {
   invite_code: string
   following?: number
   followers?: number
+  phone?: string
   created_at: string
+}
+
+export interface UserSession {
+  id: string
+  device: string
+  ip: string
+  created_at: string
+  current: boolean
 }
 
 // 用户资料（完整）
@@ -106,7 +115,18 @@ export interface Ledger {
   amount: number
   type: LedgerType
   balance_after: number
-  created_at: string
+	created_at: string
+	source_type?: string
+}
+
+export interface CreditPackage {
+  id: number
+  name: string
+  price: number
+  points: number
+  note: string
+  purchase_url: string
+  is_hot: boolean
 }
 
 export interface Announcement {

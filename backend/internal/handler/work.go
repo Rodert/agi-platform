@@ -115,6 +115,28 @@ func (h *WorkHandler) GetWorkList(c *gin.Context) {
 	response.Page(c, works, total, req.Page, req.PageSize)
 }
 
+// GetMyWorkList returns all works owned by the authenticated user, including
+// records that are not visible on the public feed yet.
+func (h *WorkHandler) GetMyWorkList(c *gin.Context) {
+	var req dto.WorkListRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		response.Error(c, errors.NewWithDetails(errors.ErrCodeBadRequest, "参数错误", err.Error()))
+		return
+	}
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+	works, total, err := h.workService.GetMyWorkList(c.GetInt64("user_id"), req.Page, req.PageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Page(c, works, total, req.Page, req.PageSize)
+}
+
 // LikeWork 点赞作品
 // @Summary 点赞作品
 // @Tags 作品

@@ -1,18 +1,32 @@
 <template>
   <div class="config-management" v-loading="loading">
-    <h2>系统配置</h2>
+    <h2>{{ pageTitle }}</h2>
     <el-tabs v-model="activeTab">
-      <el-tab-pane label="基础配置" name="basic">
+      <el-tab-pane v-if="hasTab('basic')" label="站点设置" name="basic">
         <el-form :model="basicConfig" label-width="130px" class="config-form">
           <el-form-item label="网站名称"><el-input v-model="basicConfig.site_name" /></el-form-item>
           <el-form-item label="网站描述"><el-input v-model="basicConfig.site_desc" type="textarea" :rows="3" /></el-form-item>
           <el-form-item label="注册开关"><el-switch v-model="basicConfig.register_enabled" /></el-form-item>
-          <el-form-item label="新用户赠送积分"><el-input-number v-model="basicConfig.register_credits" :min="0" /></el-form-item>
           <el-form-item><el-button type="primary" :loading="saving" @click="saveBasicConfig">保存</el-button></el-form-item>
         </el-form>
       </el-tab-pane>
 
-      <el-tab-pane label="邮件配置" name="email">
+      <el-tab-pane v-if="hasTab('packages')" label="充值套餐" name="packages">
+        <p class="package-tip">用户端固定展示三个套餐。购买链接支持支付页、商品页或外部收款页。</p>
+        <el-table :data="creditPackages" border>
+          <el-table-column label="排序" width="70"><template #default="{ $index }">{{ $index + 1 }}</template></el-table-column>
+          <el-table-column label="套餐名称" min-width="120"><template #default="{ row }"><el-input v-model="row.name" maxlength="50" /></template></el-table-column>
+          <el-table-column label="价格（元）" width="150"><template #default="{ row }"><el-input-number v-model="row.price" :min="0.01" :precision="2" /></template></el-table-column>
+          <el-table-column label="灵感值" width="130"><template #default="{ row }"><el-input-number v-model="row.points" :min="1" :precision="0" /></template></el-table-column>
+          <el-table-column label="套餐说明" min-width="170"><template #default="{ row }"><el-input v-model="row.note" maxlength="255" /></template></el-table-column>
+          <el-table-column label="购买链接" min-width="230"><template #default="{ row }"><el-input v-model="row.purchase_url" placeholder="https://..." /></template></el-table-column>
+          <el-table-column label="推荐" width="75"><template #default="{ row }"><el-switch v-model="row.is_hot" /></template></el-table-column>
+          <el-table-column label="启用" width="75"><template #default="{ row }"><el-switch v-model="row.is_active" /></template></el-table-column>
+        </el-table>
+        <div class="mt"><el-button type="primary" :loading="saving" @click="saveCreditPackages">保存套餐配置</el-button></div>
+      </el-tab-pane>
+
+      <el-tab-pane v-if="hasTab('email')" label="邮件服务" name="email">
         <el-form :model="emailConfig" label-width="130px" class="config-form">
           <el-form-item label="SMTP服务器"><el-input v-model="emailConfig.smtp_host" /></el-form-item>
           <el-form-item label="SMTP端口"><el-input-number v-model="emailConfig.smtp_port" :min="1" :max="65535" /></el-form-item>
@@ -26,7 +40,7 @@
         </el-form>
       </el-tab-pane>
 
-      <el-tab-pane label="任务配置" name="task">
+      <el-tab-pane v-if="hasTab('task')" label="任务策略" name="task">
         <el-form :model="taskConfig" label-width="170px" class="config-form">
           <el-form-item label="单用户进行中任务上限"><el-input-number v-model="taskConfig.max_active_tasks" :min="1" :max="1000" /></el-form-item>
           <el-form-item label="提示词上限（字符）"><el-input-number v-model="taskConfig.prompt_max_length" :min="1" :max="50000" /></el-form-item>
@@ -35,7 +49,7 @@
         </el-form>
       </el-tab-pane>
 
-      <el-tab-pane label="提示词优化" name="prompt-optimization">
+      <el-tab-pane v-if="hasTab('prompt-optimization')" label="提示词优化" name="prompt-optimization">
         <el-form :model="promptOptimizationConfig" label-width="170px" class="config-form">
           <el-form-item label="启用优化"><el-switch v-model="promptOptimizationConfig.is_active" /></el-form-item>
           <el-form-item label="文本模型"><el-select v-model="promptOptimizationConfig.model_name" filterable class="wide" placeholder="先在账号管理中绑定文本模型"><el-option v-for="model in textModels" :key="model.name" :label="`${model.display_name} (${model.name})`" :value="model.name"/></el-select></el-form-item>
@@ -61,7 +75,7 @@
         <el-pagination v-if="promptOptimizationLogTotal" class="mt" background layout="prev, pager, next" :current-page="promptOptimizationLogPage" :page-size="20" :total="promptOptimizationLogTotal" @current-change="loadPromptOptimizationLogs"/>
       </el-tab-pane>
 
-      <el-tab-pane label="存储配置" name="storage">
+      <el-tab-pane v-if="hasTab('storage')" label="存储配置" name="storage">
         <el-button type="primary" class="mb" @click="addStorage">添加存储配置</el-button>
         <el-table :data="storageList">
           <el-table-column prop="name" label="名称" /><el-table-column label="类型"><template #default="{ row }"><el-tag>{{ getStorageTypeName(row.type) }}</el-tag></template></el-table-column>
@@ -70,7 +84,7 @@
         </el-table>
       </el-tab-pane>
 
-      <el-tab-pane label="资源策略" name="resources">
+      <el-tab-pane v-if="hasTab('resources')" label="资源策略" name="resources">
         <el-table :data="resourcePolicies">
           <el-table-column label="资源类型" width="120"><template #default="{ row }">{{ resourceTypeName(row.resource_type) }}</template></el-table-column>
           <el-table-column prop="key_prefix" label="对象路径前缀" min-width="160"/>
@@ -89,12 +103,17 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
-const activeTab=ref('basic'),loading=ref(false),saving=ref(false),storageList=ref([]),storageDialog=ref(false),resourcePolicies=ref([]),resourcePolicyDialog=ref(false),allModels=ref([]),promptOptimizationLogs=ref([]),promptOptimizationLogTotal=ref(0),promptOptimizationLogPage=ref(1)
-const basicConfig=reactive({site_name:'',site_desc:'',register_enabled:true,register_credits:0})
+const route = useRoute()
+const configTabs = computed(() => route.meta.configTabs || ['basic', 'packages', 'email', 'task', 'prompt-optimization', 'storage', 'resources'])
+const pageTitle = computed(() => route.meta.title || '系统配置')
+const activeTab=ref(configTabs.value[0]),loading=ref(false),saving=ref(false),storageList=ref([]),storageDialog=ref(false),resourcePolicies=ref([]),resourcePolicyDialog=ref(false),allModels=ref([]),promptOptimizationLogs=ref([]),promptOptimizationLogTotal=ref(0),promptOptimizationLogPage=ref(1),creditPackages=ref([])
+const hasTab = name => configTabs.value.includes(name)
+const basicConfig=reactive({site_name:'',site_desc:'',register_enabled:true})
 const emailConfig=reactive({smtp_host:'',smtp_port:587,smtp_user:'',smtp_password:'',smtp_ssl:false,from_name:'',from_email:'',is_active:false})
 const taskConfig=reactive({max_active_tasks:50,prompt_max_length:5000,max_retry_attempts:0})
 const promptOptimizationConfig=reactive({is_active:false,model_name:'',system_prompt:'',max_input_length:5000,credit_cost:0,rate_limit_per_minute:5})
@@ -104,8 +123,9 @@ const storageForm=reactive(emptyStorage())
 const resourcePolicyForm=reactive({resource_type:'',key_prefix:'',retention_days:0,is_public:true,cache_max_age:86400,max_size_mb:20})
 const bool=v=>v===true||v==='true'
 
-async function loadAll(){loading.value=true;try{const [basic,email,task,promptOptimization,storage,policies,models]=await Promise.all([request.get('/config/basic'),request.get('/config/email'),request.get('/config/task'),request.get('/config/prompt-optimization'),request.get('/config/storage'),request.get('/config/storage/policies'),request.get('/config/models')]);Object.assign(basicConfig,{site_name:basic.site_name||'AGI Platform',site_desc:basic.site_desc||'',register_enabled:bool(basic.register_enabled),register_credits:Number(basic.new_user_gift_amount||0)});Object.assign(emailConfig,email,{smtp_password:''});Object.assign(taskConfig,task);Object.assign(promptOptimizationConfig,promptOptimization);storageList.value=storage||[];resourcePolicies.value=policies||[];allModels.value=models||[];await loadPromptOptimizationLogs(1)}finally{loading.value=false}}
+async function loadAll(){loading.value=true;try{const [basic,email,task,promptOptimization,storage,policies,models,packages]=await Promise.all([request.get('/config/basic'),request.get('/config/email'),request.get('/config/task'),request.get('/config/prompt-optimization'),request.get('/config/storage'),request.get('/config/storage/policies'),request.get('/config/models'),request.get('/config/credit-packages')]);Object.assign(basicConfig,{site_name:basic.site_name||'AGI Platform',site_desc:basic.site_desc||'',register_enabled:bool(basic.register_enabled)});Object.assign(emailConfig,email,{smtp_password:''});Object.assign(taskConfig,task);Object.assign(promptOptimizationConfig,promptOptimization);storageList.value=storage||[];resourcePolicies.value=policies||[];allModels.value=models||[];creditPackages.value=packages||[];await loadPromptOptimizationLogs(1)}finally{loading.value=false}}
 async function saveBasicConfig(){saving.value=true;try{await request.put('/config/basic',basicConfig);ElMessage.success('基础配置已保存')}finally{saving.value=false}}
+async function saveCreditPackages(){if(creditPackages.value.length!==3)return ElMessage.warning('必须保留三个套餐');if(creditPackages.value.some(item=>!item.name||!item.price||!item.points))return ElMessage.warning('请完善套餐名称、价格和灵感值');saving.value=true;try{await request.put('/config/credit-packages',creditPackages.value);ElMessage.success('充值套餐已保存');await loadAll()}finally{saving.value=false}}
 async function saveEmailConfig(){saving.value=true;try{await request.put('/config/email',emailConfig);emailConfig.smtp_password='';ElMessage.success('邮件配置已保存')}finally{saving.value=false}}
 async function saveTaskConfig(){saving.value=true;try{await request.put('/config/task',taskConfig);ElMessage.success('任务配置已保存')}finally{saving.value=false}}
 async function savePromptOptimizationConfig(){saving.value=true;try{await request.put('/config/prompt-optimization',promptOptimizationConfig);ElMessage.success('提示词优化配置已保存')}finally{saving.value=false}}
@@ -120,7 +140,8 @@ const getStorageTypeName=type=>({local:'本地存储',tencent_cos:'腾讯云COS'
 const resourceTypeName=type=>({image:'生成图片',video:'生成视频',thumbnail:'视频缩略图',reference:'用户参考图',published_image:'发布图片',published_video:'发布视频',published_thumbnail:'发布视频封面'}[type]||type)
 function editResourcePolicy(row){Object.assign(resourcePolicyForm,row);resourcePolicyDialog.value=true}
 async function saveResourcePolicy(){await request.put(`/config/storage/policies/${resourcePolicyForm.resource_type}`,{key_prefix:resourcePolicyForm.key_prefix,retention_days:resourcePolicyForm.retention_days,is_public:resourcePolicyForm.is_public,cache_max_age:resourcePolicyForm.cache_max_age,max_size_mb:resourcePolicyForm.max_size_mb});resourcePolicyDialog.value=false;ElMessage.success('资源策略已保存');await loadAll()}
+watch(configTabs, tabs => { if (!tabs.includes(activeTab.value)) activeTab.value = tabs[0] })
 onMounted(loadAll)
 </script>
 
-<style scoped>.config-management{padding:20px}.config-form{max-width:760px}.mb{margin-bottom:20px}.mt{margin-top:16px}h2{margin-bottom:20px}.field-tip,.subtle{margin-left:10px;color:#909399;font-size:12px}.subtle{margin-left:0}.wide{width:100%}</style>
+<style scoped>.config-management{padding:20px}.config-form{max-width:760px}.mb{margin-bottom:20px}.mt{margin-top:16px}h2{margin-bottom:20px}.field-tip,.subtle,.package-tip{margin-left:10px;color:#909399;font-size:12px}.subtle{margin-left:0}.package-tip{margin:0 0 16px}.wide{width:100%}</style>
