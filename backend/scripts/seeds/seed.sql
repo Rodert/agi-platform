@@ -22,7 +22,8 @@ INSERT INTO `system_configs` (`key`, `value`, `type`, `category`, `description`)
 ('invite_recharge_enabled', 'true', 'bool', 'invitation', '是否启用首充奖励'),
 
 -- 审核配置
-('audit_keywords', '["暴力", "色情", "政治"]', 'json', 'audit', '审核敏感词');
+('audit_keywords', '["暴力", "色情", "政治"]', 'json', 'audit', '审核敏感词')
+ON DUPLICATE KEY UPDATE `key` = `key`;
 
 -- ----------------------------
 -- 1.1 任务配置
