@@ -56,6 +56,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 		defer func() { mu.Lock(); updating = false; mu.Unlock() }()
 		for _, args := range [][]string{
 			{"compose", "-f", "/deploy/docker-compose.yml", "pull", "app"},
+			{"compose", "-f", "/deploy/docker-compose.yml", "run", "--rm", "--no-deps", "app", "/app/migrate"},
 			{"compose", "-f", "/deploy/docker-compose.yml", "up", "-d", "--no-deps", "--no-build", "app"},
 		} {
 			command := exec.Command("docker", args...)

@@ -84,9 +84,18 @@ func (s *ChannelCatalogService) findOrCreateModel(item adapter.DiscoveredModel, 
 	aiModel, err := s.modelRepo.FindByNameAny(item.Name)
 	if err == nil {
 		if aiModel.Type != item.Type {
-			return nil, fmt.Errorf("模型 %s 的类型与现有目录不一致", item.Name)
+			if !isLegacyGrokImageVideo(aiModel.Type, item, provider) {
+				return nil, fmt.Errorf("模型 %s 的类型与现有目录不一致", item.Name)
+			}
+			// Versions before v0.1.14 classified grok-image-video as an image
+			// model. Correct that one known historical record during sync.
+			aiModel.Type = "video"
+			aiModel.ParamsConfig = grokVideoParamsConfig(item.Name)
+			if err := s.modelRepo.Update(aiModel); err != nil {
+				return nil, err
+			}
 		}
-		if provider == "grok" && isEmptyParamsConfig(aiModel.ParamsConfig) {
+		if provider == "grok" && item.Type == "video" && isEmptyParamsConfig(aiModel.ParamsConfig) {
 			aiModel.ParamsConfig = grokVideoParamsConfig(item.Name)
 			if err := s.modelRepo.Update(aiModel); err != nil {
 				return nil, err
@@ -119,6 +128,10 @@ func (s *ChannelCatalogService) findOrCreateModel(item adapter.DiscoveredModel, 
 		return nil, err
 	}
 	return aiModel, nil
+}
+
+func isLegacyGrokImageVideo(existingType string, item adapter.DiscoveredModel, provider string) bool {
+	return provider == "grok" && item.Name == "grok-image-video" && existingType == "image" && item.Type == "video"
 }
 
 func geminiImageParamsConfig(name string) datatypes.JSON {

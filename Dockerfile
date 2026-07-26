@@ -5,7 +5,8 @@ COPY backend/go.mod backend/go.sum ./
 RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api cmd/api/main.go \
-    && CGO_ENABLED=0 GOOS=linux go build -o /out/worker cmd/worker/main.go
+    && CGO_ENABLED=0 GOOS=linux go build -o /out/worker cmd/worker/main.go \
+    && CGO_ENABLED=0 GOOS=linux go build -o /out/migrate cmd/migrate/main.go
 
 FROM node:22-alpine AS frontend-builder
 
@@ -37,11 +38,15 @@ ENV TZ=Asia/Shanghai
 
 COPY --from=backend-builder /out/api /app/api
 COPY --from=backend-builder /out/worker /app/worker
+COPY --from=backend-builder /out/migrate /app/migrate
 COPY --from=backend-builder /src/backend/configs /app/configs
+COPY --from=backend-builder /src/backend/scripts/migrations /app/migrations
 COPY --from=frontend-builder /src/frontend/apps/web/dist /usr/share/nginx/html
 COPY --from=admin-builder /src/admin/dist /usr/share/nginx/admin
 COPY deploy/nginx.conf /etc/nginx/http.d/default.conf
 COPY deploy/supervisord.conf /etc/supervisord.conf
+COPY deploy/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 80
-CMD ["supervisord", "-c", "/etc/supervisord.conf"]
+CMD ["/app/entrypoint.sh"]

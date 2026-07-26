@@ -79,6 +79,8 @@ docker compose ps
 
 首次创建 MySQL 数据卷时，容器会按文件名顺序执行 `backend/scripts/migrations/` 中的迁移，再导入种子数据。应用随后根据 `.env` 的 `SUPER_ADMIN_USERNAME`、`SUPER_ADMIN_PASSWORD` 和 `SUPER_ADMIN_NAME` 创建超级管理员；账号已存在时不会重置。已有数据卷不会重复初始化。
 
+后续镜像更新会在启动应用前执行未记录的增量迁移，并将文件名写入 `schema_migrations`。更新代理会先运行迁移任务，迁移失败时不会替换正在运行的应用；手工执行 `docker compose up -d` 时，应用入口也会执行同一检查。首次升级到具备此机制的已有数据库会将 `001-022` 视为历史基线，只执行之后新增的迁移。
+
 ## GitHub 自动构建
 
 工作流 [docker-image.yml](./.github/workflows/docker-image.yml) 会在任意分支收到 `git push` 后构建并推送带提交 SHA 的应用镜像；默认分支额外更新 `latest`：

@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/javapub/agi-platform-backend/internal/worker/adapter"
 )
 
 func TestGeminiImageParamsConfig(t *testing.T) {
@@ -56,5 +58,14 @@ func TestGrokVideoParamsConfig(t *testing.T) {
 	}
 	if len(fast["ratio"].Options) != 2 || len(fast["duration"].Options) != 6 {
 		t.Fatalf("unexpected grok-video-1.5fast config: %#v", fast)
+	}
+}
+
+func TestIsLegacyGrokImageVideo(t *testing.T) {
+	if !isLegacyGrokImageVideo("image", adapter.DiscoveredModel{Name: "grok-image-video", Type: "video"}, "grok") {
+		t.Fatal("expected legacy Grok image-to-video record to be repairable")
+	}
+	if isLegacyGrokImageVideo("image", adapter.DiscoveredModel{Name: "other-image-video", Type: "video"}, "grok") {
+		t.Fatal("unexpected repair for an unrelated model")
 	}
 }
