@@ -20,7 +20,7 @@ export function AppLayout(){
  useEffect(()=>{if(new URLSearchParams(location.search).get('login')==='1'){setLoginOpen(true);navigate('/',{replace:true})}},[location.search,navigate])
  const openNotices=()=>{if(!requireAuth())return;setNoticeOpen(true)}
  const openProtected=(path:string)=>{if(requireAuth())navigate(path)}
- const openCredit=()=>setCreditOpen(true)
+ const openCredit=()=>{if(!user){setLoginOpen(true);return}setCreditOpen(true)}
  const accountItems:MenuProps['items']=[
   {key:'profile',icon:<UserOutlined/>,label:'个人中心'},
   {key:'account',icon:<WalletOutlined/>,label:'我的账户'},
