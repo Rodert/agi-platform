@@ -21,6 +21,7 @@ FROM node:22-alpine AS admin-builder
 
 WORKDIR /src/admin
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
+COPY VERSION /src/VERSION
 COPY admin/package.json admin/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY admin/ ./
