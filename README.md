@@ -80,11 +80,9 @@ pnpm dev
 | 管理后台 | http://localhost:3012/admin/ | 管理员界面 |
 | API 健康检查 | http://localhost:3012/health | 服务状态 |
 
-## 🔑 默认账号
+## 🔑 超级管理员
 
-### 管理员
-- 用户名: `admin`
-- 密码: `admin123`
+首次启动时根据 `.env` 中的 `SUPER_ADMIN_USERNAME`、`SUPER_ADMIN_PASSWORD` 和 `SUPER_ADMIN_NAME` 创建超级管理员；账号存在后不会被环境变量重置。
 
 ## 🎯 核心特性
 
@@ -99,6 +97,7 @@ pnpm dev
 ## 📖 详细文档
 
 - [Docker 启动指南](./DOCKER_START.md) - 详细的 Docker 使用说明
+- [开发与部署指南](./DEVELOP.md) - 本地调试、服务器部署与超级管理员配置
 - [版本发布指南](./VERSION.md) - 版本号、GitHub Release 与镜像发布规则
 - [后端文档](./backend/README.md) - 后端 API 详细文档
 - [管理后台文档](./admin/README.md) - 管理后台前端文档

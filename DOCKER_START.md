@@ -65,6 +65,8 @@ cp .env.example .env
 MYSQL_ROOT_PASSWORD=...
 MYSQL_PASSWORD=...
 JWT_SECRET=...
+SUPER_ADMIN_USERNAME=...
+SUPER_ADMIN_PASSWORD=...
 HTTP_PORT=3012
 ```
 
@@ -75,7 +77,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-首次创建 MySQL 数据卷时，容器会按文件名顺序执行 `backend/scripts/migrations/` 中的迁移，再导入种子数据。已有数据卷不会重复初始化。
+首次创建 MySQL 数据卷时，容器会按文件名顺序执行 `backend/scripts/migrations/` 中的迁移，再导入种子数据。应用随后根据 `.env` 的 `SUPER_ADMIN_USERNAME`、`SUPER_ADMIN_PASSWORD` 和 `SUPER_ADMIN_NAME` 创建超级管理员；账号已存在时不会重置。已有数据卷不会重复初始化。
 
 ## GitHub 自动构建
 

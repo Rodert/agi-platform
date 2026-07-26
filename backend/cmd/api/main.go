@@ -140,6 +140,9 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	redeemCodeService := service.NewRedeemCodeService(database.DB, creditRepo)
 
 	adminRepo := repository.NewAdminRepository(database.DB)
+	if err := service.EnsureSuperAdmin(adminRepo); err != nil {
+		logger.Fatal(fmt.Sprintf("初始化超级管理员失败: %v", err))
+	}
 	workRepo := repository.NewWorkRepository(database.DB)
 	storageConfigRepo := repository.NewStorageConfigRepository(database.DB)
 	resourcePolicyRepo := repository.NewResourcePolicyRepository(database.DB)

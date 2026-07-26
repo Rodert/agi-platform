@@ -42,7 +42,7 @@
       </el-form>
 
       <div class="login-footer">
-        <p>默认账号：admin / admin123</p>
+        <p>请使用部署环境配置的管理员账号登录</p>
       </div>
     </div>
   </div>

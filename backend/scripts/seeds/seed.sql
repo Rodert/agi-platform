@@ -97,20 +97,14 @@ INSERT INTO `payment_channels` (`name`, `channel_type`, `merchant_id`, `config`,
  1, 99);
 
 -- ----------------------------
--- 6. 管理员账户（初始密码: admin123）
--- ----------------------------
-INSERT INTO `admin_users` (`username`, `password_hash`, `name`, `role`, `is_active`) VALUES
-('admin', '$2y$10$519tXJfoGyv5q3QxAHin7.JsXR0wul7PYUykt.Dvmn4Pn8IAMruCy', '超级管理员', 'super_admin', 1);
-
--- ----------------------------
--- 7. 兑换码（示例）
+-- 6. 兑换码（示例）
 -- ----------------------------
 INSERT INTO `redeem_codes` (`code`, `amount`, `batch_id`, `batch_name`, `expires_at`) VALUES
 ('TIDE2026', 50, 'BATCH001', '测试兑换码', DATE_ADD(NOW(), INTERVAL 30 DAY)),
 ('WELCOME100', 100, 'BATCH002', '新用户欢迎码', DATE_ADD(NOW(), INTERVAL 30 DAY));
 
 -- ----------------------------
--- 8. 邮箱配置（示例，需要修改）
+-- 7. 邮箱配置（示例，需要修改）
 -- ----------------------------
 INSERT INTO `email_config` (`id`, `smtp_host`, `smtp_port`, `smtp_user`, `smtp_password`, `smtp_ssl`, `from_name`, `from_email`, `is_active`) VALUES
 (1, 'smtp.gmail.com', 587, 'your-email@gmail.com', 'your-password', 0, '潮汐AI', 'noreply@tide.ai', 0);

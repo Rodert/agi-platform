@@ -33,10 +33,9 @@ pnpm dev
 pnpm build
 ```
 
-## 默认账号
+## 超级管理员
 
-- 用户名：`admin`
-- 密码：`admin123`
+首次启动时由环境变量 `SUPER_ADMIN_USERNAME`、`SUPER_ADMIN_PASSWORD` 和 `SUPER_ADMIN_NAME` 创建。部署与本地调试配置见根目录 [DEVELOP.md](../DEVELOP.md)。
 
 ## 技术栈
 
