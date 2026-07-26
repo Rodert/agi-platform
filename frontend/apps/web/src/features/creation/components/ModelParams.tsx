@@ -16,13 +16,14 @@ export const modelParamCost = (model: AIModel | undefined, values: Record<string
   }, model.cost)
 }
 
-export function ModelParams({ model, values, onChange, compact = false }: {
+export function ModelParams({ model, values, onChange, compact = false, excludeKeys = [] }: {
   model?: AIModel
   values: Record<string, unknown>
   onChange: (values: Record<string, unknown>) => void
   compact?: boolean
+  excludeKeys?: string[]
 }) {
-  const entries = Object.entries(model?.params_config || {})
+  const entries = Object.entries(model?.params_config || {}).filter(([key]) => !excludeKeys.includes(key))
   if (!entries.length) return null
   return <>{entries.map(([key, config]) => config.type === 'switch'
     ? <label key={key} className={compact ? 'theme-muted flex items-center gap-2 px-2 text-xs' : 'theme-muted mb-5 flex items-center justify-between'}><span>{config.label}</span><Switch size="small" checked={Boolean(values[key])} onChange={checked => onChange({ ...values, [key]: checked })}/></label>

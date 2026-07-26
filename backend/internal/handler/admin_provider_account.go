@@ -32,6 +32,10 @@ type channelModelStatusRequest struct {
 	IsActive bool `json:"is_active"`
 }
 
+type channelModelBulkDeleteRequest struct {
+	ModelIDs []int64 `json:"model_ids" binding:"required,min=1"`
+}
+
 func (h *AdminConfigHandler) ListChannels(c *gin.Context) {
 	rows, err := h.providerRepo.List()
 	if err != nil {
@@ -173,6 +177,26 @@ func (h *AdminConfigHandler) UpdateChannelModelStatus(c *gin.Context) {
 		return
 	}
 	h.recordAudit(c, "update_channel_model_status", "channel_model", modelID, "更新渠道模型状态", req)
+	response.Success(c, nil)
+}
+
+func (h *AdminConfigHandler) DeleteChannelModel(c *gin.Context) {
+	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil { response.Error(c, errors.ErrBadRequest); return }
+	modelID, err := strconv.ParseInt(c.Param("modelID"), 10, 64)
+	if err != nil { response.Error(c, errors.ErrBadRequest); return }
+	if err := h.channelModelRepo.Delete(channelID, modelID); err != nil { response.Error(c, err); return }
+	h.recordAudit(c, "delete_channel_model", "channel_model", modelID, "删除渠道模型绑定", nil)
+	response.Success(c, nil)
+}
+
+func (h *AdminConfigHandler) DeleteChannelModels(c *gin.Context) {
+	channelID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil { response.Error(c, errors.ErrBadRequest); return }
+	var req channelModelBulkDeleteRequest
+	if err := c.ShouldBindJSON(&req); err != nil { response.Error(c, errors.ErrBadRequest); return }
+	if err := h.channelModelRepo.DeleteMany(channelID, req.ModelIDs); err != nil { response.Error(c, err); return }
+	h.recordAudit(c, "delete_channel_models", "channel_model", channelID, "批量删除渠道模型绑定", map[string]int{"count": len(req.ModelIDs)})
 	response.Success(c, nil)
 }
 

@@ -41,3 +41,5 @@
 :root[data-theme='light'] .generation-retention-notice { border-color:rgba(15,141,133,.25); background:rgba(15,141,133,.07); color:#176761; }
 :root[data-theme='light'] .generation-retention-notice small { color:#56847f; }
 :root[data-theme='light'] .generation-retention-icon { background:rgba(15,141,133,.12); color:#078f8c; }
+.generation-error { max-width:260px; margin-top:8px; color:#ef8f8b; font-size:11px; line-height:1.5; word-break:break-word; }
+:root[data-theme='light'] .generation-error { color:#bd3c36; }

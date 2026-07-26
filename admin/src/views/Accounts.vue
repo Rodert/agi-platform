@@ -22,14 +22,16 @@
               <div>
                 <el-button size="small" :loading="syncing === row.id" @click.stop="syncModels(row)">同步上游模型</el-button>
                 <el-button size="small" type="primary" plain @click.stop="openBind(row)">手动绑定模型</el-button>
+                <el-button v-if="selectedModelIDs(row).length" size="small" type="danger" plain @click.stop="removeSelectedModels(row)">删除选中 ({{ selectedModelIDs(row).length }})</el-button>
               </div>
             </div>
-            <el-table :data="row.channel_models || []" size="small" empty-text="尚未识别到模型">
+            <el-table :data="row.channel_models || []" size="small" empty-text="尚未识别到模型" @selection-change="items => setSelectedModels(row.id, items)">
+              <el-table-column type="selection" width="46"/>
               <el-table-column label="模型名" min-width="180"><template #default="{ row: binding }"><code>{{ binding.model?.name }}</code><span class="display-name">{{ binding.model?.display_name }}</span></template></el-table-column>
               <el-table-column label="类型" width="90"><template #default="{ row: binding }"><el-tag>{{ ({ image: '图片', video: '视频', text: '文本' })[binding.model?.type] || binding.model?.type }}</el-tag></template></el-table-column>
               <el-table-column label="能力" min-width="230"><template #default="{ row: binding }">{{ capabilitySummary(binding.model) }}</template></el-table-column>
               <el-table-column label="启用" width="85"><template #default="{ row: binding }"><el-switch :model-value="binding.is_active" @change="value => setBindingStatus(row, binding, value)"/></template></el-table-column>
-              <el-table-column label="操作" width="100"><template #default="{ row: binding }"><el-button link type="primary" @click.stop="openModel(binding.model, row)">配置能力</el-button></template></el-table-column>
+              <el-table-column label="操作" width="150"><template #default="{ row: binding }"><el-button link type="primary" @click.stop="openModel(binding.model, row)">配置能力</el-button><el-button link type="danger" @click.stop="removeModel(row, binding)">删除</el-button></template></el-table-column>
             </el-table>
           </div>
         </template>
@@ -102,11 +104,13 @@ const channelForm = reactive(emptyChannel())
 const bindForm = reactive({ channel_id: 0, model_name: '', type: 'image' })
 const modelForm = reactive({ id: 0, name: '', type: 'image', display_name: '', cost: 0, description: '', ratio_options: [], resolution_options: [], duration_options: [], sound_enabled: false, sound_default: false })
 const modelContextName = ref('')
+const selectedModels = reactive({})
 const ratioPresets = ['1:1', '4:5', '3:4', '16:9', '9:16', '21:9']
 const resolutionPresets = ['480P', '720P', '1080P', '1K', '2K', '4K']
 const durationPresets = ['3s', '5s', '8s', '10s', '15s']
 const activeChannel = computed(() => channels.value.find(channel => channel.id === activeChannelId.value) || null)
 const bindTargetName = computed(() => channels.value.find(channel => channel.id === bindForm.channel_id)?.name || '该账号')
+const selectedModelIDs = channel => (selectedModels[channel.id] || []).map(binding => binding.model_id)
 
 const load = async () => { loading.value = true; try { channels.value = await request.get('/channels'); if (activeChannelId.value && !channels.value.some(channel => channel.id === activeChannelId.value)) activeChannelId.value = 0 } finally { loading.value = false } }
 const healthLabel = value => ({ healthy: '正常', unhealthy: '异常', unknown: '未检测' }[value] || '未检测')
@@ -128,6 +132,9 @@ async function syncModels(row) { selectChannel(row); syncing.value = row.id; try
 function openBind(row) { selectChannel(row); Object.assign(bindForm, { channel_id: row.id, model_name: '', type: 'image' }); bindDialog.value = true }
 async function bindModel() { await request.post(`/channels/${bindForm.channel_id}/models`, { model_name: bindForm.model_name, type: bindForm.type, is_active: true }); bindDialog.value = false; ElMessage.success('模型已绑定'); await load() }
 async function setBindingStatus(channel, binding, value) { selectChannel(channel); await request.put(`/channels/${channel.id}/models/${binding.model_id}/status`, { is_active: value }); binding.is_active = value; ElMessage.success(`账号「${channel.name}」中的模型「${binding.model?.name}」已${value ? '启用' : '停用'}`) }
+function setSelectedModels(channelID, items) { selectedModels[channelID] = items }
+async function removeModel(channel, binding) { await ElMessageBox.confirm(`仅解除「${binding.model?.name}」与账号「${channel.name}」的绑定，不会删除全局模型。`, '确认删除模型绑定', { type: 'warning' }); await request.delete(`/channels/${channel.id}/models/${binding.model_id}`); ElMessage.success('模型绑定已删除'); selectedModels[channel.id] = []; await load() }
+async function removeSelectedModels(channel) { const ids = selectedModelIDs(channel); if (!ids.length) return; await ElMessageBox.confirm(`将解除选中的 ${ids.length} 个模型绑定，不会删除全局模型。`, '确认批量删除', { type: 'warning' }); await request.delete(`/channels/${channel.id}/models`, { data: { model_ids: ids } }); ElMessage.success(`已删除 ${ids.length} 个模型绑定`); selectedModels[channel.id] = []; await load() }
 function openModel(model, channel) { if (channel) selectChannel(channel); modelContextName.value = channel?.name || ''; const params = model.params_config || {}; Object.assign(modelForm, { id: model.id, name: model.name, type: model.type, display_name: model.display_name, cost: model.cost, description: model.description || '', ratio_options: optionRows(params.ratio), resolution_options: optionRows(params.resolution), duration_options: optionRows(params.duration), sound_enabled: Boolean(params.sound), sound_default: Boolean(params.sound?.default) }); modelDialog.value = true }
 async function saveModel() { const params = {}; const ratio = makeSelect('画面比例', modelForm.ratio_options); const resolution = makeSelect('清晰度', modelForm.resolution_options); if (ratio) params.ratio = ratio; if (resolution) params.resolution = resolution; if (modelForm.type === 'video') { const duration = makeSelect('时长', modelForm.duration_options); if (duration) params.duration = duration; if (modelForm.sound_enabled) params.sound = { label: '生成声音', type: 'switch', default: modelForm.sound_default } } await request.put(`/config/models/${modelForm.id}`, { display_name: modelForm.display_name, cost: modelForm.cost, description: modelForm.description, params_config: params }); modelDialog.value = false; ElMessage.success('模型能力已保存'); await load() }
 

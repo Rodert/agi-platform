@@ -13,6 +13,7 @@
       <el-table-column prop="model_name" label="模型" min-width="150"/>
       <el-table-column label="类型" width="80"><template #default="{ row }"><el-tag>{{ row.type === 'video' ? '视频' : '图片' }}</el-tag></template></el-table-column>
       <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag><small v-if="row.status === 'processing'">{{ row.progress }}%</small></template></el-table-column>
+	  <el-table-column label="失败原因" min-width="200" show-overflow-tooltip><template #default="{ row }"><span v-if="row.status === 'failed'">{{ row.error_msg || '未返回具体原因' }}</span><span v-else>-</span></template></el-table-column>
 	      <el-table-column label="重试" width="110"><template #default="{ row }"><span>{{ retryCount(row) }} / {{ row.max_retry_attempts }}</span><small>执行 {{ row.attempt_count }} 次</small></template></el-table-column>
       <el-table-column prop="cost" label="消耗" width="80"><template #default="{ row }">{{ row.cost }} 灵感值</template></el-table-column>
       <el-table-column prop="channel_name" label="渠道" min-width="130"/>

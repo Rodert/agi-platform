@@ -353,6 +353,8 @@ func registerRoutes(router *gin.Engine, cfg *config.Config, sessionRepo *reposit
 				channels.POST("/:id/sync-models", adminConfigHandler.SyncChannelModels)
 				channels.POST("/:id/models", adminConfigHandler.BindChannelModel)
 				channels.PUT("/:id/models/:modelID/status", adminConfigHandler.UpdateChannelModelStatus)
+				channels.DELETE("/:id/models/:modelID", adminConfigHandler.DeleteChannelModel)
+				channels.DELETE("/:id/models", adminConfigHandler.DeleteChannelModels)
 			}
 
 			// 用户管理

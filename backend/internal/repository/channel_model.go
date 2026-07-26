@@ -53,3 +53,11 @@ func (r *ChannelModelRepository) UpdateStatus(channelID, modelID int64, isActive
 		Where("channel_id = ? AND model_id = ?", channelID, modelID).
 		Update("is_active", isActive).Error
 }
+
+func (r *ChannelModelRepository) Delete(channelID, modelID int64) error {
+	return r.db.Where("channel_id = ? AND model_id = ?", channelID, modelID).Delete(&model.ChannelModel{}).Error
+}
+
+func (r *ChannelModelRepository) DeleteMany(channelID int64, modelIDs []int64) error {
+	return r.db.Where("channel_id = ? AND model_id IN ?", channelID, modelIDs).Delete(&model.ChannelModel{}).Error
+}

@@ -36,6 +36,7 @@ function GenerationTurn({task,onRegenerate,onPreview,onPublish,onShare,onTools}:
      {task.status==='failed'&&<div className="generation-failed">生成失败</div>}
     </div>
     <div className="generation-actions">{actions.map(([Icon,title])=><Tooltip title={title} key={title}><button aria-label={title} disabled={((title==='下载'||title==='发布作品'||title==='分享')&&(!task.result_url||task.status!=='success'))||(title==='工具'&&(task.type!=='image'||task.status!=='success'||!task.result_url))} onClick={()=>void action(title)}><Icon/></button></Tooltip>)}</div>
+	{task.status==='failed'&&<div className="generation-error" title={task.error_msg}>{task.error_msg||'生成失败，请稍后重试'}</div>}
     {task.status==='success'&&task.result_url&&<div className="generation-retention-notice"><span className="generation-retention-icon"><DownloadOutlined/></span><span><b>请尽快保存到本地</b><small>该{task.type==='video'?'视频':'图片'}将于 {assetExpiry(task)} 自动清理</small></span><button type="button" onClick={()=>void action('下载')}>立即下载</button></div>}
     <div className="generation-cost">{task.status==='processing'?`生成中 ${task.progress}% · `:task.status==='failed'?'生成失败 · ':''}消耗 {task.cost}</div>
    </div>

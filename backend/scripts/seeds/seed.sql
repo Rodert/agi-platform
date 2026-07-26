@@ -47,7 +47,7 @@ INSERT INTO `ai_models` (`name`, `display_name`, `type`, `provider`, `descriptio
 -- 图片模型
 ('gpt-image-2', 'GPT Image 2', 'image', 'openai', '新一代图像模型，中文支持优秀', '/logos/gpt.png', '推荐', 4,
  '{"api_url":"https://api.openai.com/v1/images/generations","model":"dall-e-3","timeout":120}',
- '{"ratio":{"label":"画面比例","type":"select","options":[{"value":"1:1","label":"1:1 方形"},{"value":"16:9","label":"16:9 横版"},{"value":"9:16","label":"9:16 竖版"}],"default":"1:1"},"resolution":{"label":"分辨率","type":"select","options":[{"value":"1K","label":"1K"},{"value":"2K","label":"2K","extra_cost":2}],"default":"1K"}}',
+ '{"ratio":{"label":"画面比例","type":"select","options":[{"value":"1:1","label":"1:1"},{"value":"4:3","label":"4:3"},{"value":"3:4","label":"3:4"},{"value":"3:2","label":"3:2"},{"value":"2:3","label":"2:3"},{"value":"5:4","label":"5:4"},{"value":"4:5","label":"4:5"},{"value":"16:9","label":"16:9"},{"value":"9:16","label":"9:16"},{"value":"2:1","label":"2:1"},{"value":"1:2","label":"1:2"},{"value":"21:9","label":"21:9"},{"value":"9:21","label":"9:21"},{"value":"3:1","label":"3:1"},{"value":"1:3","label":"1:3"}],"default":"1:1"},"resolution":{"label":"分辨率","type":"select","options":[{"value":"1K","label":"1K"},{"value":"2K","label":"2K","extra_cost":1},{"value":"4K","label":"4K","extra_cost":2}],"default":"1K"}}',
  1, 1),
 
 ('seedream-4.0', 'Seedream 4.0', 'image', 'jimeng', '中文友好的图像生成模型', '/logos/jm.png', '中文友好', 4,
