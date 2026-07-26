@@ -7,19 +7,21 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 )
 
 var (
 	updateToken = os.Getenv("UPDATE_AGENT_TOKEN")
+	imageRepo   = os.Getenv("UPDATE_IMAGE_REPOSITORY")
 	mu          sync.Mutex
 	updating    bool
 )
 
 func main() {
-	if updateToken == "" {
-		log.Fatal("UPDATE_AGENT_TOKEN is required")
+	if updateToken == "" || imageRepo == "" {
+		log.Fatal("UPDATE_AGENT_TOKEN and UPDATE_IMAGE_REPOSITORY are required")
 	}
 
 	http.HandleFunc("/update", update)
@@ -30,6 +32,11 @@ func main() {
 func update(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Update-Token")), []byte(updateToken)) != 1 {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var input struct { Version string `json:"version"` }
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil || !isVersion(input.Version) {
+		http.Error(w, "a semantic version is required", http.StatusBadRequest)
 		return
 	}
 
@@ -53,6 +60,7 @@ func update(w http.ResponseWriter, r *http.Request) {
 		} {
 			command := exec.Command("docker", args...)
 			command.Dir = "/deploy"
+			command.Env = append(os.Environ(), "APP_IMAGE="+imageRepo+":"+input.Version)
 			if output, err := command.CombinedOutput(); err != nil {
 				log.Printf("update command failed: docker %v: %v: %s", args, err, output)
 				return
@@ -60,4 +68,16 @@ func update(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Print("application update completed")
 	}()
+}
+
+func isVersion(version string) bool {
+	parts := strings.Split(version, ".")
+	if len(parts) != 3 { return false }
+	for _, part := range parts {
+		if part == "" { return false }
+		for _, char := range part {
+			if char < '0' || char > '9' { return false }
+		}
+	}
+	return true
 }

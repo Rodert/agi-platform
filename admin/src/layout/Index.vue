@@ -4,12 +4,11 @@
       <div class="logo">
         <div>
           <h3>AGI Platform</h3>
-          <el-button class="version-check" link :loading="checkingUpdate" @click="checkForUpdate(true)">
+          <el-button class="version-check" link @click="versionDialogVisible = true; refreshVersions()">
             <el-icon><RefreshRight /></el-icon>
             v{{ APP_VERSION }}
             <el-badge v-if="hasUpdate" is-dot class="update-dot" />
           </el-button>
-          <el-button v-if="hasUpdate && updateEnabled" class="update-button" type="primary" size="small" @click="startUpdate">立即更新</el-button>
         </div>
       </div>
       <el-menu
@@ -90,6 +89,33 @@
       </el-main>
     </el-container>
   </el-container>
+
+  <el-dialog v-model="versionDialogVisible" title="版本管理" width="420px" destroy-on-close>
+    <div class="version-dialog-heading">
+      <span>当前版本</span>
+      <el-button text :loading="checkingUpdate" @click="refreshVersions"><el-icon><RefreshRight /></el-icon>刷新版本</el-button>
+    </div>
+    <div class="current-version">v{{ APP_VERSION }}</div>
+    <div class="version-status">
+      <el-icon :class="hasUpdate ? 'has-update' : 'up-to-date'"><CircleCheckFilled /></el-icon>
+      {{ hasUpdate ? `发现新版本 v${latestVersion}` : '已是最新版本' }}
+    </div>
+    <el-button v-if="hasUpdate && updateEnabled" class="deploy-latest" type="primary" @click="startUpdate(latestVersion)">更新并重启至 v{{ latestVersion }}</el-button>
+
+    <el-divider>版本回退</el-divider>
+    <p class="rollback-hint">选择要回退到的版本，最多显示最近 3 个历史版本。</p>
+    <el-radio-group v-model="selectedRollbackVersion" class="rollback-list">
+      <el-radio v-for="release in rollbackVersions" :key="release.version" :value="release.version" border>
+        <span>v{{ release.version }}</span>
+        <small>{{ release.publishedAt }}</small>
+      </el-radio>
+    </el-radio-group>
+    <el-empty v-if="!checkingUpdate && !rollbackVersions.length" description="暂无可回退版本" :image-size="60" />
+    <template #footer>
+      <el-button @click="versionDialogVisible = false">关闭</el-button>
+      <el-button type="warning" :disabled="!updateEnabled || !selectedRollbackVersion" @click="startUpdate(selectedRollbackVersion)">回滚并重启</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup>
@@ -106,10 +132,11 @@ import {
   Operation,
   Files,
   UserFilled,
-  RefreshRight
+  RefreshRight,
+  CircleCheckFilled
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { APP_VERSION, LATEST_RELEASE_URL, compareVersions } from '@/config/release'
+import { APP_VERSION, RELEASES_URL, compareVersions } from '@/config/release'
 import { getSystemUpdateStatus, triggerSystemUpdate } from '@/api/admin'
 
 const route = useRoute()
@@ -133,13 +160,17 @@ const checkingUpdate = ref(false)
 const hasUpdate = ref(false)
 const latestVersion = ref('')
 const updateEnabled = ref(false)
+const versionDialogVisible = ref(false)
+const releases = ref([])
+const selectedRollbackVersion = ref('')
+const rollbackVersions = computed(() => releases.value.filter((release) => release.version !== APP_VERSION).slice(0, 3))
 
-const checkForUpdate = async (showResult = false) => {
+const refreshVersions = async () => {
   if (checkingUpdate.value) return
 
   checkingUpdate.value = true
   try {
-    const response = await fetch(LATEST_RELEASE_URL, {
+    const response = await fetch(RELEASES_URL, {
       headers: { Accept: 'application/vnd.github+json' }
     })
 
@@ -147,29 +178,25 @@ const checkForUpdate = async (showResult = false) => {
       throw new Error('暂未发布可检测的版本')
     }
 
-    const release = await response.json()
-    latestVersion.value = String(release.tag_name || '').replace(/^v/, '')
+    const items = await response.json()
+    releases.value = items
+      .filter((release) => !release.draft && !release.prerelease && /^v?\d+\.\d+\.\d+$/.test(release.tag_name || ''))
+      .map((release) => ({
+        version: String(release.tag_name).replace(/^v/, ''),
+        publishedAt: new Date(release.published_at).toLocaleDateString('zh-CN')
+      }))
+      .sort((left, right) => compareVersions(right.version, left.version))
+    latestVersion.value = releases.value[0]?.version || APP_VERSION
     hasUpdate.value = Boolean(latestVersion.value && compareVersions(latestVersion.value, APP_VERSION) > 0)
-
-    if (showResult) {
-      if (hasUpdate.value) {
-        ElMessageBox.alert(`发现新版本 v${latestVersion.value}，当前版本为 v${APP_VERSION}。`, '检测到新版本', {
-          confirmButtonText: '知道了',
-          type: 'info'
-        })
-      } else {
-        ElMessage.success(`当前已是最新版本 v${APP_VERSION}`)
-      }
-    }
   } catch (error) {
-    if (showResult) ElMessage.warning(error.message || '版本检测失败，请稍后重试')
+    ElMessage.warning(error.message || '版本检测失败，请稍后重试')
   } finally {
     checkingUpdate.value = false
   }
 }
 
 onMounted(async () => {
-  checkForUpdate()
+  refreshVersions()
   if (authStore.adminInfo?.role === 'super_admin') {
     try {
       updateEnabled.value = Boolean((await getSystemUpdateStatus()).enabled)
@@ -179,14 +206,16 @@ onMounted(async () => {
   }
 })
 
-const startUpdate = () => {
-  ElMessageBox.confirm(`将拉取 v${latestVersion.value} 并重启当前服务，期间后台会短暂不可用。确定继续吗？`, '确认更新', {
-    confirmButtonText: '开始更新',
+const startUpdate = (version) => {
+  if (!version) return
+  const action = compareVersions(version, APP_VERSION) >= 0 ? '更新' : '回滚'
+  ElMessageBox.confirm(`将${action}并重启至 v${version}，期间后台会短暂不可用。确定继续吗？`, `确认${action}`, {
+    confirmButtonText: `开始${action}`,
     cancelButtonText: '取消',
     type: 'warning'
   }).then(async () => {
-    await triggerSystemUpdate()
-    ElMessage.success('更新已启动，页面将在几秒后恢复')
+    await triggerSystemUpdate(version)
+    ElMessage.success(`${action}已启动，页面将在几秒后恢复`)
     window.setTimeout(() => window.location.reload(), 10000)
   }).catch(() => {})
 }
@@ -265,10 +294,16 @@ const handleCommand = (command) => {
   margin-left: 5px;
 }
 
-.update-button {
-  display: block;
-  margin-top: 6px;
-}
+.version-dialog-heading { display: flex; align-items: center; justify-content: space-between; color: #606266; }
+.current-version { margin-top: 12px; font-size: 26px; font-weight: 600; color: #303133; }
+.version-status { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: #909399; font-size: 13px; }
+.up-to-date { color: #67c23a; }
+.has-update { color: #e6a23c; }
+.deploy-latest { width: 100%; margin-top: 18px; }
+.rollback-hint { margin: 0 0 12px; color: #909399; font-size: 13px; }
+.rollback-list { display: flex; width: 100%; flex-direction: column; gap: 8px; }
+.rollback-list :deep(.el-radio) { display: flex; width: 100%; height: 40px; align-items: center; justify-content: space-between; margin: 0; }
+.rollback-list small { margin-left: auto; color: #909399; }
 
 .header {
   display: flex;

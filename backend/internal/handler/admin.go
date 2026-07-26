@@ -2,6 +2,7 @@ package handler
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strconv"
@@ -111,7 +112,10 @@ func (h *AdminHandler) TriggerSystemUpdate(c *gin.Context) {
 	}
 	url := os.Getenv("UPDATE_AGENT_URL")
 	if url == "" { url = "http://updater:8090" }
-	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url+"/update", bytes.NewReader(nil))
+	var payload struct { Version string `json:"version"` }
+	if err := c.ShouldBindJSON(&payload); err != nil || payload.Version == "" { response.Error(c, errors.New(errors.ErrCodeBadRequest, "版本号无效")); return }
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodPost, url+"/update", bytes.NewReader(body))
 	if err != nil { response.Error(c, err); return }
 	req.Header.Set("X-Update-Token", token)
 	client := &http.Client{Timeout: 5 * time.Second}
@@ -124,7 +128,7 @@ func (h *AdminHandler) TriggerSystemUpdate(c *gin.Context) {
 }
 
 func (h *AdminHandler) GetSystemUpdateStatus(c *gin.Context) {
-	response.Success(c, gin.H{"enabled": os.Getenv("UPDATE_ENABLED") == "true" && os.Getenv("UPDATE_AGENT_TOKEN") != ""})
+	response.Success(c, gin.H{"enabled": os.Getenv("UPDATE_ENABLED") == "true" && os.Getenv("UPDATE_AGENT_TOKEN") != "", "repository": os.Getenv("UPDATE_IMAGE_REPOSITORY")})
 }
 
 func (h *AdminHandler) ListAdmins(c *gin.Context) {
