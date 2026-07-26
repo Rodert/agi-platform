@@ -87,3 +87,21 @@ docker compose up -d --no-deps app
 ```
 
 完整的镜像发布、版本检测和后台更新说明见 [DOCKER_START.md](./DOCKER_START.md)。
+
+## 后台一键更新
+
+服务器默认允许超级管理员在后台拉取镜像、重启或回滚。`.env.example` 已包含以下配置，部署前必须替换更新令牌：
+
+```env
+UPDATE_ENABLED=true
+UPDATE_AGENT_TOKEN=<替换为至少32位随机字符串>
+COMPOSE_PROFILES=update
+```
+
+随后仍使用正常启动命令：
+
+```bash
+docker compose up -d
+```
+
+`COMPOSE_PROFILES=update` 会自动启动更新代理，无需在命令行重复写 `--profile update`。更新代理可访问 Docker Socket，只应在受信任的单机服务器启用。

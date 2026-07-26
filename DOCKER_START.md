@@ -119,15 +119,16 @@ docker compose up -d
 
 ### 后台一键更新
 
-部署机可允许超级管理员从后台直接拉取并重启 `app`。在 `.env` 中设置，并使用发布镜像而非本地构建镜像：
+部署默认允许超级管理员从后台直接拉取并重启 `app`。`.env.example` 已包含更新配置，部署前必须替换 `UPDATE_AGENT_TOKEN`，并使用发布镜像而非本地构建镜像：
 
 ```env
 APP_IMAGE=ghcr.io/rodert/agi-platform:latest
 UPDATE_ENABLED=true
-UPDATE_AGENT_TOKEN=<至少 32 位随机字符串>
+UPDATE_AGENT_TOKEN=<替换为至少 32 位随机字符串>
+COMPOSE_PROFILES=update
 ```
 
-执行一次 `docker compose --profile update up -d --build updater app` 后，后台检测到新版时会显示“立即更新”。更新代理拥有 Docker Socket 权限，只应部署在受信任的单机环境，并保持令牌私密。
+`.env` 中的 `COMPOSE_PROFILES=update` 会自动启用更新代理，因此正常执行 `docker compose up -d` 即可。后台检测到新版时会显示“立即更新”。更新代理拥有 Docker Socket 权限，只应部署在受信任的单机环境，并保持令牌私密。
 
 ## 日常运维
 
