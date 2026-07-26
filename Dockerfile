@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /out/api cmd/api/main.go \
 FROM node:22-alpine AS frontend-builder
 
 WORKDIR /src/frontend
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
 COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml ./
 COPY frontend/apps/web/package.json ./apps/web/package.json
 RUN pnpm install --frozen-lockfile
@@ -20,7 +20,7 @@ RUN pnpm build:web
 FROM node:22-alpine AS admin-builder
 
 WORKDIR /src/admin
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
 COPY admin/package.json admin/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY admin/ ./
