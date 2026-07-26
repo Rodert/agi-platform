@@ -45,13 +45,13 @@ docker compose -f docker-compose.local.yml down
 | `mysql` | `mysql:8.0` | 数据库 |
 | `redis` | `redis:7-alpine` | 缓存和任务队列 |
 
-应用镜像中的统一入口：
+部署版通过宿主机 `3012` 端口提供统一入口；容器内部仍使用 `80`，不对宿主机直接开放。
 
 | 地址 | 服务 |
 | --- | --- |
-| `http://<host>/` | 用户端 |
-| `http://<host>/admin/` | 管理后台 |
-| `http://<host>/health` | API 健康检查 |
+| `http://<host>:3012/` | 用户端 |
+| `http://<host>:3012/admin/` | 管理后台 |
+| `http://<host>:3012/health` | API 健康检查 |
 
 ## 首次部署
 
@@ -65,6 +65,7 @@ cp .env.example .env
 MYSQL_ROOT_PASSWORD=...
 MYSQL_PASSWORD=...
 JWT_SECRET=...
+HTTP_PORT=3012
 ```
 
 本机构建并启动：
@@ -74,7 +75,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-首次创建 MySQL 数据卷时，容器会依次执行 `backend/scripts/migrations/` 中的迁移和种子数据。已有数据卷不会重复初始化。
+首次创建 MySQL 数据卷时，容器会按文件名顺序执行 `backend/scripts/migrations/` 中的迁移，再导入种子数据。已有数据卷不会重复初始化。
 
 ## GitHub 自动构建
 

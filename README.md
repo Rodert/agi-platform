@@ -32,6 +32,8 @@ agi-platform/
 docker-compose up -d --build
 ```
 
+部署版统一入口默认使用 `3012` 端口：用户端为 `http://localhost:3012/`，管理后台为 `http://localhost:3012/admin/`。
+
 ### 方式 2：Docker 本地调试
 
 本地调试环境会以源码启动 API、Worker、用户端和管理端，默认使用独立端口，不影响部署环境：
@@ -171,7 +173,7 @@ pnpm build
 ### 端口被占用
 ```bash
 # 修改 .env 文件中的端口配置
-HTTP_PORT=8080
+HTTP_PORT=3012
 ```
 
 ### 数据库连接失败
