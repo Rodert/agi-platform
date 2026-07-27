@@ -23,7 +23,7 @@ export function ExplorePage(){
  const search=()=>setSearchTerm(query.trim())
  return <main className="page inspiration-page">
   <div className="inspiration-generator-zone">
-   <div className="theme-muted mb-2 flex items-center gap-2 text-xs"><span className="theme-accent">◉ 新品上线</span><span>GPT Image 2 已开放体验，中文与细节表现全面提升</span></div>
+   <div className="theme-muted mb-2 flex items-center gap-2 text-xs"><span className="theme-accent">◉ 新品上线</span><span>Image 2 已开放体验，中文与细节表现全面提升</span></div>
    {mode==='image'?<GeneratePanel refill={refill} onModeChange={setMode}/>:<InlineVideoPanel refill={refill} onModeChange={setMode}/>}<ModeSwitcher mode={mode} onChange={setMode} onTools={()=>nav('/tools')}/>
   </div>
   <section className="inspiration-showcase">
