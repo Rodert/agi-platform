@@ -29,15 +29,17 @@
       <el-table-column prop="name" label="用户名" width="150" />
       <el-table-column prop="email" label="邮箱" width="200" />
       <el-table-column prop="level" label="会员等级" width="120" />
+      <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.is_active ? 'success' : 'info'">{{ row.is_active ? '启用' : '停用' }}</el-tag></template></el-table-column>
       <el-table-column prop="balance" label="灵感值" width="110" />
       <el-table-column label="注册时间" width="180">
         <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
       </el-table-column>
-      <el-table-column label="操作" fixed="right" width="250">
+      <el-table-column label="操作" fixed="right" width="320">
         <template #default="{ row }">
           <el-button size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button size="small" type="primary" plain @click="openRecharge(row)">调整灵感值</el-button>
           <el-button size="small" link type="primary" @click="openCreditLedgers(row)">流水</el-button>
+          <el-button size="small" link :type="row.is_active ? 'danger' : 'success'" @click="toggleUserStatus(row)">{{ row.is_active ? '停用' : '启用' }}</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -106,7 +108,7 @@
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 
 const loading = ref(false)
@@ -240,6 +242,22 @@ const handleEdit = (row) => {
   editingId.value = row.id
   Object.assign(userForm, { username: row.name, email: row.email, password: '', level: row.level || 'free' })
   dialogVisible.value = true
+}
+
+const toggleUserStatus = async (row) => {
+  const isActive = !row.is_active
+  const action = isActive ? '启用' : '停用'
+  const detail = isActive ? '用户将可以重新登录。' : '该用户的全部登录会话将立即失效。'
+  try {
+    await ElMessageBox.confirm(`确定${action}用户“${row.name}”吗？${detail}`, '确认操作', { type: 'warning' })
+    await request.put(`/users/${row.id}/status`, { is_active: isActive })
+    ElMessage.success(`用户已${action}`)
+    await fetchUsers()
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      // 错误已在响应拦截器中提示。
+    }
+  }
 }
 
 const openRecharge = (row) => {

@@ -417,7 +417,12 @@ func (h *AdminHandler) UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
-	err = h.adminService.UpdateUserStatus(id, req.IsActive)
+	adminID, exists := c.Get("admin_id")
+	if !exists {
+		response.Error(c, errors.ErrUnauthorized)
+		return
+	}
+	err = h.adminService.UpdateUserStatus(adminID.(int64), id, req.IsActive)
 	if err != nil {
 		response.Error(c, err)
 		return

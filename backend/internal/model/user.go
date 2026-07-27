@@ -15,6 +15,7 @@ type User struct {
 	Avatar       string         `gorm:"size:255" json:"avatar"`
 	Bio          string         `gorm:"size:500" json:"bio"`
 	Level        string         `gorm:"size:20;default:free" json:"level"` // free/member/pro
+	IsActive     bool           `gorm:"not null;default:true;index" json:"is_active"`
 	InviteCode   string         `gorm:"size:10;uniqueIndex;not null" json:"invite_code"`
 	InvitedBy    int64          `gorm:"index" json:"invited_by"`
 	Phone        *string        `gorm:"size:20;uniqueIndex" json:"phone"`

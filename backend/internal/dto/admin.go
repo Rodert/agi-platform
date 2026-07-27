@@ -273,6 +273,7 @@ type AdminUserResponse struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	Level     string    `json:"level"`
+	IsActive  bool      `json:"is_active"`
 	Balance   int       `json:"balance"`
 	CreatedAt time.Time `json:"created_at"`
 }

@@ -25,7 +25,7 @@ func (s *AdminService) GetUserList(req *dto.UserListRequest) (*dto.UserListRespo
 		account, accountErr := s.creditRepo.GetAccount(user.ID)
 		if accountErr != nil && accountErr != gorm.ErrRecordNotFound { return nil, accountErr }
 		if accountErr == nil { balance = account.Balance }
-		responses = append(responses, &dto.AdminUserResponse{ID: user.ID, Email: user.Email, Name: user.Name, Level: user.Level, Balance: balance, CreatedAt: user.CreatedAt})
+		responses = append(responses, &dto.AdminUserResponse{ID: user.ID, Email: user.Email, Name: user.Name, Level: user.Level, IsActive: user.IsActive, Balance: balance, CreatedAt: user.CreatedAt})
 	}
 	return &dto.UserListResponse{List: responses, Total: total}, nil
 }
@@ -130,7 +130,7 @@ func (s *AdminService) CreateUser(adminID int64, req *dto.CreateUserRequest) err
 	now := time.Now()
 	user := &model.User{
 		Email: req.Email, PasswordHash: hashedPassword, Name: req.Username,
-		Level: "free", InviteCode: inviteCode, CreatedAt: now, UpdatedAt: now,
+		Level: "free", IsActive: true, InviteCode: inviteCode, CreatedAt: now, UpdatedAt: now,
 	}
 	if err := s.userRepo.Create(user); err != nil {
 		return err
@@ -163,13 +163,38 @@ func (s *AdminService) UpdateUser(adminID, userID int64, req *dto.AdminUpdateUse
 	return nil
 }
 
-// UpdateUserStatus 当前用户表没有启停字段。
-func (s *AdminService) UpdateUserStatus(userID int64, _ bool) error {
-	if _, err := s.userRepo.FindByID(userID); err != nil {
+// UpdateUserStatus changes a user's access state. Disabling also invalidates
+// all existing sessions so the account loses access immediately.
+func (s *AdminService) UpdateUserStatus(adminID, userID int64, isActive bool) error {
+	user, err := s.userRepo.FindByID(userID)
+	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return errors.ErrUserNotFound
 		}
 		return err
 	}
-	return errors.New(errors.ErrCodeBadRequest, "当前用户模型暂不支持启停状态")
+	beforeData, _ := json.Marshal(map[string]bool{"is_active": user.IsActive})
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+			"is_active": isActive,
+			"updated_at": time.Now(),
+		}).Error; err != nil {
+			return err
+		}
+		if !isActive {
+			if err := tx.Model(&model.UserSession{}).Where("user_id = ? AND revoked_at IS NULL", userID).Update("revoked_at", time.Now()).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	afterData, _ := json.Marshal(map[string]bool{"is_active": isActive})
+	action, description := "enable_user", "启用用户"
+	if !isActive {
+		action, description = "disable_user", "停用用户并撤销全部登录会话"
+	}
+	s.recordAudit(&model.AdminLog{AdminID: adminID, Action: action, TargetType: "user", TargetID: userID, BeforeData: string(beforeData), AfterData: string(afterData), Description: description, CreatedAt: time.Now()})
+	return nil
 }

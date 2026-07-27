@@ -85,3 +85,14 @@ func TestDiscoverGrokModelsClassifiesVideoAndTextModels(t *testing.T) {
 		t.Fatalf("unexpected discovered models: %#v", models)
 	}
 }
+
+func TestParseGrokTaskRecognizesFailureStatus(t *testing.T) {
+	raw := []byte(`{"code":"success","data":{"status":"FAILURE","data":{"status":"failed","error":{"code":"video_generation_failed","message":"Upstream returned 429"}}},"error":{"code":"task_failed","message":"Upstream returned 429"},"status":"failed","task_id":"task-1"}`)
+	task, err := parseGrokTask(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != "failed" || task.ErrorMessage != "Upstream returned 429" {
+		t.Fatalf("unexpected failed task: %#v", task)
+	}
+}

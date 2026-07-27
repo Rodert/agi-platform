@@ -231,7 +231,7 @@ func normalizeGrokStatus(value string) string {
 		return "processing"
 	case "success", "succeeded", "completed", "done":
 		return "succeeded"
-	case "failed", "error", "cancelled", "canceled", "expired":
+	case "failed", "failure", "error", "cancelled", "canceled", "expired":
 		return "failed"
 	default:
 		return ""

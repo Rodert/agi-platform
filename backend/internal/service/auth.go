@@ -204,6 +204,9 @@ func (s *AuthService) Login(req *dto.LoginRequest, device, ip string) (*dto.Auth
 		}
 		return nil, err
 	}
+	if !user.IsActive {
+		return nil, errors.New(errors.ErrCodeForbidden, "该账号已停用")
+	}
 
 	// 2. 验证密码或验证码
 	if req.Type == "password" {
