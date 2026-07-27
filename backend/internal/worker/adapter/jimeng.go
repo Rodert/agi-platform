@@ -93,6 +93,9 @@ func (a *JimengInternationalAdapter) createPayload(request *GenerateRequest) map
 func (a *JimengInternationalAdapter) parseTask(raw []byte, fallbackID string) (*AsyncTask, error) {
 	var payload interface{}
 	if err := json.Unmarshal(raw, &payload); err != nil {
+		if strings.HasPrefix(strings.TrimSpace(string(raw)), "<") {
+			return nil, fmt.Errorf("即梦国际上游返回了网页而非 JSON，请检查渠道 API 地址；ZZ API 应配置为 https://zz1cc.cc.cd/v1")
+		}
 		return nil, fmt.Errorf("解析即梦国际任务响应失败: %w", err)
 	}
 	root, _ := payload.(map[string]interface{})

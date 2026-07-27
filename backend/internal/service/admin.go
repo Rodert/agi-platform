@@ -611,7 +611,7 @@ func (s *AdminService) GetTaskList(req *dto.AdminTaskListRequest) ([]*dto.AdminT
 			item.UserName, item.UserEmail = task.User.Name, task.User.Email
 		}
 		if task.Channel != nil {
-			item.ChannelName = task.Channel.Name
+			item.ChannelName, item.ChannelProvider = task.Channel.Name, task.Channel.Provider
 		}
 		if task.CompletedAt != nil {
 			item.CompletedAt = task.CompletedAt.Format("2006-01-02 15:04:05")

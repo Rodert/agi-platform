@@ -5,10 +5,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/javapub/agi-platform-backend/internal/model"
 )
+
+func TestJimengInternationalAdapterExplainsHTMLResponse(t *testing.T) {
+	adapter := NewJimengInternationalAdapter(nil)
+	_, err := adapter.parseTask([]byte("<!doctype html><html></html>"), "")
+	if err == nil || !strings.Contains(err.Error(), "https://zz1cc.cc.cd/v1") {
+		t.Fatalf("unexpected HTML response error: %v", err)
+	}
+}
 
 func TestJimengInternationalAdapterSubmitsAndPollsVideoTask(t *testing.T) {
 	var createPayload map[string]interface{}

@@ -153,6 +153,7 @@ type AdminTaskResponse struct {
 	UserName         string                     `json:"user_name"`
 	UserEmail        string                     `json:"user_email"`
 	ChannelName      string                     `json:"channel_name"`
+	ChannelProvider  string                     `json:"channel_provider"`
 	ProviderTaskID   string                     `json:"provider_task_id"`
 	ProviderStatus   string                     `json:"provider_status"`
 	ProviderResponse map[string]interface{}     `json:"provider_response"`
