@@ -32,7 +32,7 @@ func TestGrokVideoParamsConfig(t *testing.T) {
 	if err := json.Unmarshal(grokVideoParamsConfig("grok-image-video"), &standard); err != nil {
 		t.Fatal(err)
 	}
-	if len(standard["ratio"].Options) != 7 || standard["resolution"].Options[0].Value != "720p" || len(standard["duration"].Options) != 3 {
+	if len(standard["ratio"].Options) != 7 || standard["resolution"].Options[0].Value != "720p" || len(standard["duration"].Options) != 2 || standard["duration"].Options[0].Value != "6" || standard["duration"].Options[1].Value != "10" {
 		t.Fatalf("unexpected standard config: %#v", standard)
 	}
 

@@ -12,7 +12,7 @@ SET `type` = 'video',
         JSON_OBJECT('value','720p','label','720p'), JSON_OBJECT('value','480p','label','480p')
       )),
       'duration', JSON_OBJECT('label', '视频时长', 'type', 'select', 'default', '6', 'options', JSON_ARRAY(
-        JSON_OBJECT('value','6','label','6 秒'), JSON_OBJECT('value','10','label','10 秒'), JSON_OBJECT('value','15','label','15 秒')
+        JSON_OBJECT('value','6','label','6 秒'), JSON_OBJECT('value','10','label','10 秒')
       ))
     )
 WHERE `name` = 'grok-image-video';
