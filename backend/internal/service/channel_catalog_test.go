@@ -56,7 +56,7 @@ func TestGrokVideoParamsConfig(t *testing.T) {
 	if err := json.Unmarshal(grokVideoParamsConfig("grok-video-1.5fast"), &fast); err != nil {
 		t.Fatal(err)
 	}
-	if len(fast["ratio"].Options) != 2 || len(fast["duration"].Options) != 6 {
+	if len(fast["ratio"].Options) != 2 || len(fast["duration"].Options) != 2 || fast["duration"].Options[0].Value != "6" || fast["duration"].Options[1].Value != "10" {
 		t.Fatalf("unexpected grok-video-1.5fast config: %#v", fast)
 	}
 }

@@ -69,10 +69,13 @@ class APIClient {
       headers,
     })
 
-    const data: ApiResponse<T> = await response.json()
+    const data: ApiResponse<T> | null = await response.json().catch(() => null)
 
-    if (!response.ok || !data.success) {
-      throw new ApiError(data.error?.message || data.message || '请求失败', data.error?.code)
+    if (!response.ok || !data?.success) {
+      if (response.status === 413) {
+        throw new ApiError('参考图过大，请压缩图片后重试')
+      }
+      throw new ApiError(data?.error?.message || data?.message || '请求失败', data?.error?.code)
     }
 
     return data.data as T

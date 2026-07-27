@@ -17,8 +17,7 @@ SET `type` = 'video',
     )
 WHERE `name` = 'grok-image-video';
 
--- Grok Video 1.5 Fast has the same portrait/landscape and duration profile
--- as the existing Grok Video 1.5 preset.
+-- Grok Video 1.5 Fast supports only 6- and 10-second videos.
 UPDATE `ai_models`
 SET `type` = 'video',
     `params_config` = JSON_OBJECT(
@@ -28,10 +27,8 @@ SET `type` = 'video',
       'resolution', JSON_OBJECT('label', '清晰度', 'type', 'select', 'default', '720p', 'options', JSON_ARRAY(
         JSON_OBJECT('value','720p','label','720p'), JSON_OBJECT('value','480p','label','480p')
       )),
-      'duration', JSON_OBJECT('label', '视频时长', 'type', 'select', 'default', '4', 'options', JSON_ARRAY(
-        JSON_OBJECT('value','4','label','4 秒'), JSON_OBJECT('value','6','label','6 秒'),
-        JSON_OBJECT('value','8','label','8 秒'), JSON_OBJECT('value','10','label','10 秒'),
-        JSON_OBJECT('value','12','label','12 秒'), JSON_OBJECT('value','15','label','15 秒')
+      'duration', JSON_OBJECT('label', '视频时长', 'type', 'select', 'default', '6', 'options', JSON_ARRAY(
+        JSON_OBJECT('value','6','label','6 秒'), JSON_OBJECT('value','10','label','10 秒')
       ))
     )
 WHERE `name` = 'grok-video-1.5fast';

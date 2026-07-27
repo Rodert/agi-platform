@@ -172,9 +172,13 @@ func isEmptyParamsConfig(value datatypes.JSON) bool {
 func grokVideoParamsConfig(name string) datatypes.JSON {
 	ratioOptions := []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"}
 	durationOptions := []string{"6", "10", "15"}
-	if name == "grok-video-1.5" || name == "grok-video-1.5-1080p" || name == "grok-video-1.5fast" {
+	if name == "grok-video-1.5" || name == "grok-video-1.5-1080p" {
 		ratioOptions = []string{"16:9", "9:16"}
 		durationOptions = []string{"4", "6", "8", "10", "12", "15"}
+	}
+	if name == "grok-video-1.5fast" {
+		ratioOptions = []string{"16:9", "9:16"}
+		durationOptions = []string{"6", "10"}
 	}
 	optionList := func(values []string, suffix string) []map[string]interface{} {
 		result := make([]map[string]interface{}, 0, len(values))

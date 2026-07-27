@@ -606,7 +606,7 @@ func (s *CreationService) taskToResponse(task *model.Task) *dto.TaskResponse {
 		ModelName:    task.ModelName,
 		ResultURL:    task.ResultURL,
 		ThumbnailURL: task.ThumbnailURL,
-		ErrorMsg:     task.ErrorMsg,
+		ErrorMsg:     userFacingTaskError(task),
 		Cost:         task.Cost,
 		CreatedAt:    task.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
@@ -616,4 +616,17 @@ func (s *CreationService) taskToResponse(task *model.Task) *dto.TaskResponse {
 	}
 
 	return resp
+}
+
+// userFacingTaskError prevents upstream responses, provider details, and
+// internal infrastructure errors from being exposed through the user task API.
+// The original error remains available to administrators in the task record.
+func userFacingTaskError(task *model.Task) string {
+	if task.Status != "failed" || task.ErrorMsg == "" {
+		return task.ErrorMsg
+	}
+	if task.Type == "video" {
+		return "视频生成失败，请调整提示词或参数后重试"
+	}
+	return "图片生成失败，请调整提示词或参数后重试"
 }
