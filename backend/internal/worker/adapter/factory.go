@@ -21,6 +21,7 @@ func init() {
 	Register("chatgpt", func(config map[string]interface{}) (Adapter, error) { return NewOpenAIAdapter(config), nil })
 	Register("gemini", func(config map[string]interface{}) (Adapter, error) { return NewGeminiAdapter(config), nil })
 	Register("jimeng", func(config map[string]interface{}) (Adapter, error) { return NewJimengAdapter(config), nil })
+	Register("jimeng_international", func(config map[string]interface{}) (Adapter, error) { return NewJimengInternationalAdapter(config), nil })
 	Register("grok", func(config map[string]interface{}) (Adapter, error) { return NewGrokAdapter(config), nil })
 	Register("demo", func(config map[string]interface{}) (Adapter, error) { return NewDemoAdapter(), nil })
 }
@@ -69,6 +70,8 @@ func DiscoverModels(ctx context.Context, channel *model.AIProviderAccount) ([]Di
 		return discoverGeminiModels(ctx, channel)
 	case "grok":
 		return discoverGrokModels(ctx, channel)
+	case "jimeng_international":
+		return discoverJimengInternationalModels(ctx, channel)
 	case "demo":
 		return []DiscoveredModel{{Name: "demo-image", Type: "image"}}, nil
 	default:
@@ -186,13 +189,27 @@ func discoveredType(name string) string {
 	if strings.Contains(name, "image") || strings.Contains(name, "dall-e") || strings.Contains(name, "seedream") || strings.Contains(name, "flux") {
 		return "image"
 	}
-	if strings.Contains(name, "video") || strings.Contains(name, "sora") || strings.Contains(name, "veo") || strings.Contains(name, "kling") || strings.Contains(name, "runway") {
+	if strings.Contains(name, "video") || strings.HasPrefix(name, "as-sd") || strings.Contains(name, "sora") || strings.Contains(name, "veo") || strings.Contains(name, "kling") || strings.Contains(name, "runway") {
 		return "video"
 	}
 	if strings.Contains(name, "gpt") || strings.Contains(name, "gemini") || strings.Contains(name, "claude") || strings.Contains(name, "deepseek") || strings.Contains(name, "qwen") || strings.Contains(name, "glm") || strings.Contains(name, "grok") {
 		return "text"
 	}
 	return ""
+}
+
+// JimengAdapter preserves the original channel contract. The international
+// ZZ-based video API is intentionally isolated in JimengInternationalAdapter.
+type JimengAdapter struct {
+	apiConfig map[string]interface{}
+}
+
+func NewJimengAdapter(apiConfig map[string]interface{}) *JimengAdapter {
+	return &JimengAdapter{apiConfig: apiConfig}
+}
+
+func (a *JimengAdapter) Generate(context.Context, *GenerateRequest) (*GenerateResponse, error) {
+	return nil, fmt.Errorf("即梦适配器尚未实现真实生成协议")
 }
 
 // DemoAdapter 演示适配器（用于测试）
@@ -211,17 +228,4 @@ func (a *DemoAdapter) Generate(ctx context.Context, req *GenerateRequest) (*Gene
 		ImageURL:     "https://picsum.photos/1024/1024",
 		ThumbnailURL: "https://picsum.photos/512/512",
 	}, nil
-}
-
-// JimengAdapter 即梦适配器
-type JimengAdapter struct {
-	apiConfig map[string]interface{}
-}
-
-func NewJimengAdapter(apiConfig map[string]interface{}) *JimengAdapter {
-	return &JimengAdapter{apiConfig: apiConfig}
-}
-
-func (a *JimengAdapter) Generate(ctx context.Context, req *GenerateRequest) (*GenerateResponse, error) {
-	return nil, fmt.Errorf("即梦适配器尚未实现真实生成协议")
 }

@@ -61,6 +61,16 @@ func TestGrokVideoParamsConfig(t *testing.T) {
 	}
 }
 
+func TestJimengVideoParamsConfig(t *testing.T) {
+	var config map[string]modelParamConfig
+	if err := json.Unmarshal(jimengVideoParamsConfig(), &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config["ratio"].Options) != 3 || len(config["duration"].Options) != 3 || config["duration"].Default != "10" {
+		t.Fatalf("unexpected Jimeng video config: %#v", config)
+	}
+}
+
 func TestIsLegacyGrokImageVideo(t *testing.T) {
 	if !isLegacyGrokImageVideo("image", adapter.DiscoveredModel{Name: "grok-image-video", Type: "video"}, "grok") {
 		t.Fatal("expected legacy Grok image-to-video record to be repairable")

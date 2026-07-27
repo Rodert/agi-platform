@@ -292,7 +292,7 @@ func firstNumber(value map[string]interface{}, keys ...string) int {
 			case float64:
 				return int(typed)
 			case string:
-				if number, err := strconv.Atoi(typed); err == nil {
+				if number, err := strconv.Atoi(strings.TrimSuffix(strings.TrimSpace(typed), "%")); err == nil {
 					return number
 				}
 			}

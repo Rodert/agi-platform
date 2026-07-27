@@ -18,8 +18,9 @@ type GenerateRequest struct {
 type GenerateResponse struct {
 	ImageURL     string `json:"image_url"`
 	ImageBase64  string `json:"image_base64"`
-	VideoURL     string `json:"video_url"`
-	ThumbnailURL string `json:"thumbnail_url"`
+	VideoURL     string            `json:"video_url"`
+	VideoHeaders map[string]string `json:"-"`
+	ThumbnailURL string            `json:"thumbnail_url"`
 }
 
 // Adapter AI 模型适配器接口

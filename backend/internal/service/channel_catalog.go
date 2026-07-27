@@ -101,6 +101,12 @@ func (s *ChannelCatalogService) findOrCreateModel(item adapter.DiscoveredModel, 
 				return nil, err
 			}
 		}
+		if provider == "jimeng_international" && item.Type == "video" && isEmptyParamsConfig(aiModel.ParamsConfig) {
+			aiModel.ParamsConfig = jimengVideoParamsConfig()
+			if err := s.modelRepo.Update(aiModel); err != nil {
+				return nil, err
+			}
+		}
 		if provider == "gemini" && item.Type == "image" && isEmptyParamsConfig(aiModel.ParamsConfig) {
 			aiModel.ParamsConfig = geminiImageParamsConfig(item.Name)
 			if err := s.modelRepo.Update(aiModel); err != nil {
@@ -115,6 +121,9 @@ func (s *ChannelCatalogService) findOrCreateModel(item adapter.DiscoveredModel, 
 	paramsConfig := datatypes.JSON([]byte("{}"))
 	if provider == "grok" && item.Type == "video" {
 		paramsConfig = grokVideoParamsConfig(item.Name)
+	}
+	if provider == "jimeng_international" && item.Type == "video" {
+		paramsConfig = jimengVideoParamsConfig()
 	}
 	if provider == "gemini" && item.Type == "image" {
 		paramsConfig = geminiImageParamsConfig(item.Name)
@@ -194,6 +203,22 @@ func grokVideoParamsConfig(name string) datatypes.JSON {
 		"ratio":      map[string]interface{}{"label": "画面比例", "type": "select", "default": ratioOptions[0], "options": optionList(ratioOptions, "")},
 		"resolution": map[string]interface{}{"label": "清晰度", "type": "select", "default": "720p", "options": optionList([]string{"720p", "480p"}, "")},
 		"duration":   map[string]interface{}{"label": "视频时长", "type": "select", "default": durationOptions[0], "options": optionList(durationOptions, " 秒")},
+	})
+	return datatypes.JSON(params)
+}
+
+func jimengVideoParamsConfig() datatypes.JSON {
+	params, _ := json.Marshal(map[string]interface{}{
+		"ratio": map[string]interface{}{"label": "画面比例", "type": "select", "default": "16:9", "options": []map[string]interface{}{
+			{"value": "16:9", "label": "16:9"},
+			{"value": "9:16", "label": "9:16"},
+			{"value": "1:1", "label": "1:1"},
+		}},
+		"duration": map[string]interface{}{"label": "视频时长", "type": "select", "default": "10", "options": []map[string]interface{}{
+			{"value": "5", "label": "5 秒"},
+			{"value": "10", "label": "10 秒"},
+			{"value": "15", "label": "15 秒"},
+		}},
 	})
 	return datatypes.JSON(params)
 }

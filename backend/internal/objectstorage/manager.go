@@ -142,6 +142,16 @@ func (m *Manager) UploadBase64(ctx context.Context, resourceType, encoded string
 // UploadFromURL streams an upstream result through a bounded local temporary
 // file, allowing size validation before an object-store upload begins.
 func (m *Manager) UploadFromURL(ctx context.Context, resourceType, sourceURL string) (*StoredObject, error) {
+	return m.uploadFromURL(ctx, resourceType, sourceURL, nil)
+}
+
+// UploadFromURLWithHeaders downloads an upstream result that requires request
+// headers, then stores it using the same validation path as public URLs.
+func (m *Manager) UploadFromURLWithHeaders(ctx context.Context, resourceType, sourceURL string, headers map[string]string) (*StoredObject, error) {
+	return m.uploadFromURL(ctx, resourceType, sourceURL, headers)
+}
+
+func (m *Manager) uploadFromURL(ctx context.Context, resourceType, sourceURL string, headers map[string]string) (*StoredObject, error) {
 	policy, err := m.policyRepo.FindByType(resourceType)
 	if err != nil {
 		return nil, err
@@ -149,6 +159,9 @@ func (m *Manager) UploadFromURL(ctx context.Context, resourceType, sourceURL str
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, sourceURL, nil)
 	if err != nil {
 		return nil, err
+	}
+	for key, value := range headers {
+		request.Header.Set(key, value)
 	}
 	response, err := m.httpClient.Do(request)
 	if err != nil {

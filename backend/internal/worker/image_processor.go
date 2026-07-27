@@ -133,6 +133,8 @@ func (p *ImageProcessor) Process(ctx context.Context, msg *TaskMessage) error {
 	var stored *objectstorage.StoredObject
 	if result.ImageBase64 != "" && sourceURL == "" {
 		stored, err = p.storageManager.UploadBase64(ctx, resourceType, result.ImageBase64)
+	} else if len(result.VideoHeaders) > 0 {
+		stored, err = p.storageManager.UploadFromURLWithHeaders(ctx, resourceType, sourceURL, result.VideoHeaders)
 	} else {
 		stored, err = p.storageManager.UploadFromURL(ctx, resourceType, sourceURL)
 	}

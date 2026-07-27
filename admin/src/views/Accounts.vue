@@ -49,10 +49,11 @@
       <div v-if="channelForm.id" class="dialog-context"><span>正在编辑</span><strong>{{ channelForm.name || '未命名账号' }}</strong><el-tag size="small" effect="plain">{{ channelForm.provider }}</el-tag><span>{{ channelForm.api_url || '未设置接口地址' }}</span></div>
       <el-form :model="channelForm" label-width="100px">
         <el-form-item label="渠道账号"><el-input v-model="channelForm.name" placeholder="例如 ChatGPT 主账号"/></el-form-item>
-        <el-form-item label="渠道"><el-select v-model="channelForm.provider" class="full" @change="ensureGrokConfig"><el-option v-for="item in providers" :key="item" :value="item" :label="item"/></el-select></el-form-item>
+        <el-form-item label="渠道"><el-select v-model="channelForm.provider" class="full" @change="ensureProviderConfig"><el-option v-for="item in providers" :key="item" :value="item" :label="item"/></el-select></el-form-item>
         <el-form-item label="API 地址"><el-input v-model="channelForm.api_url"/></el-form-item>
         <el-form-item label="API Key"><el-input v-model="channelForm.api_key" type="password" show-password :placeholder="channelForm.id ? '留空表示不修改' : '请输入 API Key'"/></el-form-item>
         <template v-if="channelForm.provider === 'grok'"><el-divider>Grok 接口配置</el-divider><el-form-item label="模型列表路径"><el-input v-model="channelForm.extra_config.models_path" placeholder="/v1/models"/></el-form-item><el-form-item label="创建任务路径"><el-input v-model="channelForm.extra_config.create_path" placeholder="/v1/video/generations"/></el-form-item><el-form-item label="查询状态路径"><el-input v-model="channelForm.extra_config.status_path" placeholder="/v1/video/generations/{task_id}"/></el-form-item><el-form-item label="参考图字段"><el-input v-model="channelForm.extra_config.reference_field" placeholder="images"/></el-form-item><el-form-item label="轮询间隔"><el-input-number v-model="channelForm.extra_config.poll_interval_seconds" :min="1" :max="60"/><span class="hint">秒</span></el-form-item><el-form-item label="轮询超时"><el-input-number v-model="channelForm.extra_config.poll_timeout_seconds" :min="30" :max="3600"/><span class="hint">秒</span></el-form-item></template>
+        <template v-if="channelForm.provider === 'jimeng_international'"><el-divider>即梦国际接口配置</el-divider><el-form-item label="模型列表路径"><el-input v-model="channelForm.extra_config.models_path" placeholder="/v1/models"/></el-form-item><el-form-item label="创建任务路径"><el-input v-model="channelForm.extra_config.create_path" placeholder="/videos"/></el-form-item><el-form-item label="查询状态路径"><el-input v-model="channelForm.extra_config.status_path" placeholder="/videos/{task_id}"/></el-form-item><el-form-item label="成品下载路径"><el-input v-model="channelForm.extra_config.content_path" placeholder="/videos/{task_id}/content"/></el-form-item><el-form-item label="轮询间隔"><el-input-number v-model="channelForm.extra_config.poll_interval_seconds" :min="1" :max="60"/><span class="hint">秒</span></el-form-item><el-form-item label="轮询超时"><el-input-number v-model="channelForm.extra_config.poll_timeout_seconds" :min="30" :max="3600"/><span class="hint">秒</span></el-form-item></template>
         <el-form-item label="优先级"><el-input-number v-model="channelForm.priority" :min="1" :max="9999"/><span class="hint">数字越小越优先</span></el-form-item>
         <el-form-item label="启用"><el-switch v-model="channelForm.is_active"/></el-form-item>
       </el-form>
@@ -98,7 +99,7 @@ const activeChannelId = ref(0)
 const channelDialog = ref(false)
 const bindDialog = ref(false)
 const modelDialog = ref(false)
-const providers = ['openai', 'chatgpt', 'gemini', 'grok', 'jimeng', 'wave', 'demo']
+const providers = ['openai', 'chatgpt', 'gemini', 'grok', 'jimeng', 'jimeng_international', 'wave', 'demo']
 const emptyChannel = () => ({ id: 0, name: '', provider: 'openai', api_url: '', api_key: '', is_active: true, priority: 100, extra_config: {} })
 const channelForm = reactive(emptyChannel())
 const bindForm = reactive({ channel_id: 0, model_name: '', type: 'image' })
@@ -122,10 +123,14 @@ const makeSelect = (label, rows) => { const options = rows.filter(item => item.v
 const addOption = options => options.push({ value: '', extra_cost: 0 })
 const removeOption = (options, index) => options.splice(index, 1)
 
-function ensureGrokConfig() { if (!channelForm.extra_config || typeof channelForm.extra_config !== 'object') channelForm.extra_config = {}; if (channelForm.provider === 'grok') Object.assign(channelForm.extra_config, { models_path: channelForm.extra_config.models_path || '/v1/models', create_path: channelForm.extra_config.create_path || '/v1/video/generations', status_path: channelForm.extra_config.status_path || '/v1/video/generations/{task_id}', reference_field: channelForm.extra_config.reference_field || 'images', poll_interval_seconds: channelForm.extra_config.poll_interval_seconds || 5, poll_timeout_seconds: channelForm.extra_config.poll_timeout_seconds || 900 }) }
+function ensureProviderConfig() {
+  if (!channelForm.extra_config || typeof channelForm.extra_config !== 'object') channelForm.extra_config = {}
+  if (channelForm.provider === 'grok') Object.assign(channelForm.extra_config, { models_path: channelForm.extra_config.models_path || '/v1/models', create_path: channelForm.extra_config.create_path || '/v1/video/generations', status_path: channelForm.extra_config.status_path || '/v1/video/generations/{task_id}', reference_field: channelForm.extra_config.reference_field || 'images', poll_interval_seconds: channelForm.extra_config.poll_interval_seconds || 5, poll_timeout_seconds: channelForm.extra_config.poll_timeout_seconds || 900 })
+  if (channelForm.provider === 'jimeng_international') Object.assign(channelForm.extra_config, { models_path: channelForm.extra_config.models_path || '/v1/models', create_path: channelForm.extra_config.create_path || '/videos', status_path: channelForm.extra_config.status_path || '/videos/{task_id}', content_path: channelForm.extra_config.content_path || '/videos/{task_id}/content', poll_interval_seconds: channelForm.extra_config.poll_interval_seconds || 5, poll_timeout_seconds: channelForm.extra_config.poll_timeout_seconds || 900 })
+}
 function selectChannel(row) { activeChannelId.value = row.id }
 function channelRowClass({ row }) { return row.id === activeChannelId.value ? 'is-active-account' : '' }
-function openChannel(row) { if (row) selectChannel(row); Object.assign(channelForm, emptyChannel(), row || {}, { api_key: '' }); ensureGrokConfig(); channelDialog.value = true }
+function openChannel(row) { if (row) selectChannel(row); Object.assign(channelForm, emptyChannel(), row || {}, { api_key: '' }); ensureProviderConfig(); channelDialog.value = true }
 async function saveChannel() { const body = { ...channelForm }; delete body.id; if (channelForm.id) await request.put(`/channels/${channelForm.id}`, body); else await request.post('/channels', body); channelDialog.value = false; ElMessage.success('渠道已保存'); await load() }
 async function removeChannel(row) { selectChannel(row); await ElMessageBox.confirm(`将删除账号「${row.name}」（${row.provider}）及其全部模型绑定。此操作无法撤销。`, '确认删除当前账号', { type: 'warning', confirmButtonText: `删除「${row.name}」`, cancelButtonText: '取消' }); await request.delete(`/channels/${row.id}`); ElMessage.success(`账号「${row.name}」已删除`); await load() }
 async function syncModels(row) { selectChannel(row); await ElMessageBox.confirm(`将以账号「${row.name}」当前上游模型列表为准，解除上游已不再返回的模型绑定。历史任务不会删除。`, '重新同步上游模型', { type: 'warning', confirmButtonText: '重新同步' }); syncing.value = row.id; try { const result = await request.post(`/channels/${row.id}/sync-models`); ElMessage.success(`账号「${row.name}」已同步 ${result.length} 个模型`); await load() } finally { syncing.value = 0 } }
