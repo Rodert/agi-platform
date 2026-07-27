@@ -3,7 +3,7 @@ import { Avatar, Badge, Button, Drawer, Dropdown, Segmented, message, type MenuP
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../store/AppStore'
-import { LOGIN_REQUIRED_EVENT } from '../utils/auth'
+import { CREDIT_PACKAGES_EVENT, LOGIN_REQUIRED_EVENT } from '../utils/auth'
 import { LoginDialog } from '../features/auth/LoginDialog'
 import { CommunityDialog } from '../features/community/CommunityDialog'
 import { NotificationsDrawer } from '../features/notifications/NotificationsDrawer'
@@ -17,6 +17,7 @@ export function AppLayout(){
  const doAuthenticate=async(input:{email:string;password?:string;code?:string;type:'password'|'code'})=>{const success=await authenticate(input);if(success){setLoginOpen(false);msg.success('登录成功，欢迎回来')}return success}
  const doRegister=async(input:{email:string;password:string;confirm_password:string;code?:string})=>{const success=await register(input);if(success){setLoginOpen(false);msg.success('注册成功，欢迎加入')}return success}
  useEffect(()=>{const open=()=>setLoginOpen(true);window.addEventListener(LOGIN_REQUIRED_EVENT,open);return()=>window.removeEventListener(LOGIN_REQUIRED_EVENT,open)},[])
+ useEffect(()=>{const open=()=>setCreditOpen(true);window.addEventListener(CREDIT_PACKAGES_EVENT,open);return()=>window.removeEventListener(CREDIT_PACKAGES_EVENT,open)},[])
  useEffect(()=>{if(new URLSearchParams(location.search).get('login')==='1'){setLoginOpen(true);navigate('/',{replace:true})}},[location.search,navigate])
  const openNotices=()=>{if(!requireAuth())return;setNoticeOpen(true)}
  const openProtected=(path:string)=>{if(requireAuth())navigate(path)}

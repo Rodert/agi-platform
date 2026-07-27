@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AIModel, Ledger, Task, User, Work } from '../types'
-import { requestLogin } from '../utils/auth'
-import { apiClient } from '../utils/api'
+import { CREDIT_PACKAGES_EVENT, requestLogin } from '../utils/auth'
+import { ApiError, apiClient } from '../utils/api'
 
 interface CreateTaskInput {
   prompt: string
@@ -13,6 +13,8 @@ interface CreateTaskInput {
   firstFrameUrl?: string
   lastFrameUrl?: string
 }
+
+type CreateTaskResult = 'success' | 'insufficient_credit' | 'failed'
 
 interface Store {
   user: User | null
@@ -28,7 +30,7 @@ interface Store {
   requireAuth: () => boolean
   toggleLike: (id: number) => Promise<void>
   toggleCollect: (id: number) => Promise<void>
-  createTask: (input: CreateTaskInput) => Promise<boolean>
+  createTask: (input: CreateTaskInput) => Promise<CreateTaskResult>
   retryTask: (id: number) => void
   recharge: () => void
   checkIn: () => boolean
@@ -169,7 +171,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   const createTask = async (input: CreateTaskInput) => {
-    if (!requireAuth()) return false
+    if (!requireAuth()) return 'failed'
     try {
       if (input.type === 'image') {
         await apiClient.generation.createImage({ prompt: input.prompt, model_name: input.modelName, params: input.params, reference_image: input.referenceImage })
@@ -184,10 +186,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })
       }
       await Promise.all([loadTasks(), loadUserProfile()])
-      return true
+      return 'success'
     } catch (error) {
       console.error('创建任务失败:', error)
-      return false
+      if (error instanceof ApiError && Number(error.code) === 5001) {
+        window.dispatchEvent(new Event(CREDIT_PACKAGES_EVENT))
+        return 'insufficient_credit'
+      }
+      return 'failed'
     }
   }
 

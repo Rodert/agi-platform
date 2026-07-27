@@ -13,10 +13,17 @@ interface ApiResponse<T = any> {
   success: boolean
   data?: T
   error?: {
-    code: string
+    code: number | string
     message: string
   }
   message?: string
+}
+
+export class ApiError extends Error {
+  constructor(message: string, public readonly code?: number | string) {
+    super(message)
+    this.name = 'ApiError'
+  }
 }
 
 // API客户端
@@ -65,7 +72,7 @@ class APIClient {
     const data: ApiResponse<T> = await response.json()
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error?.message || data.message || '请求失败')
+      throw new ApiError(data.error?.message || data.message || '请求失败', data.error?.code)
     }
 
     return data.data as T

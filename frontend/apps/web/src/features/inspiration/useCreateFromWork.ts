@@ -24,14 +24,14 @@ export function useCreateFromWork() {
       params.ratio = work.ratio
     }
 
-    const created = await createTask({
+    const result = await createTask({
       prompt: work.prompt,
       type: work.type,
       modelName: model.name,
       params,
     })
-    if (!created) {
-      message.error('任务提交失败，请稍后重试')
+    if (result !== 'success') {
+      if (result === 'failed') message.error('任务提交失败，请稍后重试')
       return false
     }
 
