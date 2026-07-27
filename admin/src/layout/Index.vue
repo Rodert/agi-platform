@@ -90,7 +90,14 @@
     </el-container>
   </el-container>
 
-  <el-dialog v-model="versionDialogVisible" title="版本管理" width="420px" destroy-on-close>
+  <el-dialog v-model="versionDialogVisible" title="版本管理" width="420px" :close-on-click-modal="!restarting" :close-on-press-escape="!restarting" :show-close="!restarting" destroy-on-close>
+    <section v-if="restarting" class="restart-countdown" aria-live="assertive">
+      <el-icon><RefreshRight /></el-icon>
+      <h3>服务正在重启</h3>
+      <strong>{{ restartCountdown }}</strong>
+      <p>更新已开始，页面将在 {{ restartCountdown }} 秒后自动刷新。</p>
+    </section>
+    <template v-else>
     <div class="version-dialog-heading">
       <span>当前版本</span>
       <el-button text :loading="checkingUpdate" @click="refreshVersions(true)"><el-icon><RefreshRight /></el-icon>刷新版本</el-button>
@@ -111,7 +118,8 @@
       </el-radio>
     </el-radio-group>
     <el-empty v-if="!checkingUpdate && !rollbackVersions.length" description="暂无可回退版本" :image-size="60" />
-    <template #footer>
+    </template>
+    <template v-if="!restarting" #footer>
       <el-button @click="versionDialogVisible = false">关闭</el-button>
       <el-button type="warning" :disabled="!updateEnabled || !selectedRollbackVersion" @click="startUpdate(selectedRollbackVersion)">回滚并重启</el-button>
     </template>
@@ -119,7 +127,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import {
@@ -163,6 +171,9 @@ const updateEnabled = ref(false)
 const versionDialogVisible = ref(false)
 const releases = ref([])
 const selectedRollbackVersion = ref('')
+const restarting = ref(false)
+const restartCountdown = ref(7)
+let restartTimer
 const rollbackVersions = computed(() => releases.value.filter((release) => release.version !== APP_VERSION).slice(0, 3))
 
 const refreshVersions = async (force = false) => {
@@ -199,8 +210,22 @@ const openVersionDialog = () => {
   refreshVersions()
 }
 
+const startRestartCountdown = () => {
+  restarting.value = true
+  restartCountdown.value = 7
+  restartTimer = window.setInterval(() => {
+    if (restartCountdown.value <= 1) {
+      window.clearInterval(restartTimer)
+      restartTimer = undefined
+      window.location.reload()
+      return
+    }
+    restartCountdown.value -= 1
+  }, 1000)
+}
+
 const startUpdate = (version) => {
-  if (!version) return
+  if (!version || restarting.value) return
   const action = compareVersions(version, APP_VERSION) >= 0 ? '更新' : '回滚'
   ElMessageBox.confirm(`将${action}并重启至 v${version}，期间后台会短暂不可用。确定继续吗？`, `确认${action}`, {
     confirmButtonText: `开始${action}`,
@@ -208,10 +233,16 @@ const startUpdate = (version) => {
     type: 'warning'
   }).then(async () => {
     await triggerSystemUpdate(version)
-    ElMessage.success(`${action}已启动，页面将在几秒后恢复`)
-    window.setTimeout(() => window.location.reload(), 10000)
-  }).catch(() => {})
+    startRestartCountdown()
+  }).catch((error) => {
+    if (error === 'cancel' || error === 'close') return
+    ElMessage.error(error.response?.data?.error?.message || error.message || `${action}启动失败，请稍后重试`)
+  })
 }
+
+onBeforeUnmount(() => {
+  if (restartTimer) window.clearInterval(restartTimer)
+})
 
 const handleCommand = (command) => {
   if (command === 'logout') {
@@ -297,6 +328,12 @@ const handleCommand = (command) => {
 .rollback-list { display: flex; width: 100%; flex-direction: column; gap: 8px; }
 .rollback-list :deep(.el-radio) { display: flex; width: 100%; height: 40px; align-items: center; justify-content: space-between; margin: 0; }
 .rollback-list small { margin-left: auto; color: #909399; }
+.restart-countdown { display: grid; min-height: 265px; place-items: center; align-content: center; text-align: center; }
+.restart-countdown .el-icon { color: #409eff; font-size: 32px; animation: restart-spin 1s linear infinite; }
+.restart-countdown h3 { margin: 16px 0 4px; color: #303133; font-size: 18px; }
+.restart-countdown strong { color: #409eff; font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums; }
+.restart-countdown p { margin: 14px 0 0; color: #909399; font-size: 13px; }
+@keyframes restart-spin { to { transform: rotate(360deg); } }
 
 .header {
   display: flex;
