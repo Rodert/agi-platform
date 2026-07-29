@@ -65,7 +65,7 @@ func (a *GrokAdapter) PollInterval() time.Duration {
 }
 
 func (a *GrokAdapter) PollTimeout() time.Duration {
-	return time.Duration(configInt(a.config, "poll_timeout_seconds", 900, 30, 3600)) * time.Second
+	return time.Duration(configInt(a.config, "poll_timeout_seconds", 3600, 30, 3600)) * time.Second
 }
 
 func (a *GrokAdapter) createPayload(req *GenerateRequest) map[string]interface{} {

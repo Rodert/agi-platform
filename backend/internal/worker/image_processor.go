@@ -227,7 +227,7 @@ func (p *ImageProcessor) failTask(task *model.Task, attempt *model.TaskAttempt, 
 }
 
 func (p *ImageProcessor) processAsyncTask(ctx context.Context, task *model.Task, adp adapter.AsyncTaskAdapter, request *adapter.GenerateRequest) (*adapter.GenerateResponse, error) {
-	interval, timeout := 5*time.Second, 15*time.Minute
+	interval, timeout := 5*time.Second, time.Hour
 	if config, ok := adp.(adapter.PollingConfig); ok {
 		interval, timeout = config.PollInterval(), config.PollTimeout()
 	}
@@ -235,7 +235,7 @@ func (p *ImageProcessor) processAsyncTask(ctx context.Context, task *model.Task,
 		interval = 5 * time.Second
 	}
 	if timeout <= 0 {
-		timeout = 15 * time.Minute
+		timeout = time.Hour
 	}
 	pollCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

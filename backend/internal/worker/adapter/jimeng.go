@@ -62,7 +62,7 @@ func (a *JimengInternationalAdapter) PollInterval() time.Duration {
 }
 
 func (a *JimengInternationalAdapter) PollTimeout() time.Duration {
-	return time.Duration(configInt(a.config, "poll_timeout_seconds", 900, 30, 3600)) * time.Second
+	return time.Duration(configInt(a.config, "poll_timeout_seconds", 3600, 30, 3600)) * time.Second
 }
 
 func (a *JimengInternationalAdapter) createPayload(request *GenerateRequest) map[string]interface{} {
