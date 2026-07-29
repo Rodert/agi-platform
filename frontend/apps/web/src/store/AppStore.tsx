@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AIModel, Ledger, Task, User, Work } from '../types'
 import { CREDIT_PACKAGES_EVENT, requestLogin } from '../utils/auth'
 import { ApiError, apiClient } from '../utils/api'
@@ -36,6 +36,9 @@ interface Store {
   checkIn: () => boolean
   redeem: () => boolean
   loadTasks: () => Promise<void>
+	loadMoreTasks: () => Promise<void>
+	hasMoreTasks: boolean
+	loadingMoreTasks: boolean
 	loadWorks: () => Promise<void>
 	refreshProfile: () => Promise<void>
 }
@@ -47,7 +50,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false)
   const [works, setWorks] = useState<Work[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [taskTotal, setTaskTotal] = useState(0)
+  const [loadingMoreTasks, setLoadingMoreTasks] = useState(false)
+  const nextTaskPageRef = useRef(2)
   const [models, setModels] = useState<AIModel[]>([])
+
+  const mergeTasks = useCallback((current: Task[], incoming: Task[]) => {
+    const merged = new Map(current.map(task => [task.id, task]))
+    incoming.forEach(task => merged.set(task.id, task))
+    return [...merged.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  }, [])
 
   const loadUserProfile = useCallback(async () => {
     try {
@@ -63,11 +75,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!apiClient.getToken()) return
     try {
       const result = await apiClient.tasks.list({ page: 1, page_size: 50 })
-      setTasks(result.list)
+      setTaskTotal(result.total)
+      setTasks(current => mergeTasks(current, result.list))
     } catch (error) {
       console.error('加载任务失败:', error)
     }
-  }, [])
+  }, [mergeTasks])
+
+  const loadMoreTasks = useCallback(async () => {
+    if (!apiClient.getToken() || loadingMoreTasks || tasks.length >= taskTotal) return
+    setLoadingMoreTasks(true)
+    try {
+      const result = await apiClient.tasks.list({ page: nextTaskPageRef.current, page_size: 50 })
+      setTaskTotal(result.total)
+      setTasks(current => mergeTasks(current, result.list))
+      nextTaskPageRef.current += 1
+    } catch (error) {
+      console.error('加载更多任务失败:', error)
+    } finally {
+      setLoadingMoreTasks(false)
+    }
+  }, [loadingMoreTasks, mergeTasks, taskTotal, tasks.length])
 
   const loadWorks = useCallback(async () => {
     try {
@@ -129,6 +157,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     apiClient.setToken(null)
     setUser(null)
     setTasks([])
+    setTaskTotal(0)
+    nextTaskPageRef.current = 2
     setAuthReady(true)
   }
 
@@ -217,9 +247,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     checkIn: () => false,
     redeem: () => false,
     loadTasks,
+	loadMoreTasks,
+	hasMoreTasks: tasks.length < taskTotal,
+	loadingMoreTasks,
 	loadWorks,
 	refreshProfile: loadUserProfile,
-  }), [authReady, loadTasks, loadWorks, models, tasks, user, works])
+  }), [authReady, loadMoreTasks, loadTasks, loadWorks, loadingMoreTasks, models, taskTotal, tasks, user, works])
 
   return <Context.Provider value={value}>{children}</Context.Provider>
 }

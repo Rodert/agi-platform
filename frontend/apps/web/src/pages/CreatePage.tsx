@@ -45,7 +45,7 @@ function GenerationTurn({task,onRegenerate,onPreview,onPublish,onShare,onTools}:
 }
 
 export function CreatePage(){
- const {tasks,loadTasks}=useApp()
+ const {tasks,loadTasks,loadMoreTasks,hasMoreTasks,loadingMoreTasks}=useApp()
  const [mode,setMode]=useState<CreationMode>('image')
  const [refill,setRefill]=useState<{prompt:string;key:number}>()
  const [preview,setPreview]=useState<Task|null>(null)
@@ -94,6 +94,7 @@ export function CreatePage(){
    {tasks.length===0?<div className="generation-empty"><div>≈</div><h1>还没有生成记录</h1><p>在下方输入提示词开始创作，或前往灵感页获取灵感</p></div>:<div className="generation-thread">
    {today.length>0&&<section className="generation-day"><h1>今天</h1>{today.map(t=><GenerationTurn task={t} onRegenerate={regenerate} onPreview={setPreview} onPublish={setPublishTask} onShare={setShareTask} onTools={setToolTask} key={t.id}/>)}</section>}
     {earlier.length>0&&<section className="generation-day"><h1>更早</h1>{earlier.map(t=><GenerationTurn task={t} onRegenerate={regenerate} onPreview={setPreview} onPublish={setPublishTask} onShare={setShareTask} onTools={setToolTask} key={t.id}/>)}</section>}
+    {hasMoreTasks&&<div className="generation-load-more"><Button onClick={()=>void loadMoreTasks()} loading={loadingMoreTasks}>加载更多记录</Button></div>}
    </div>}
   </div>
   <div className="generation-composer"><div className="generation-notice">{mode==='image'?'◉ 新一代图像模型已上线，中文文字与细节表现全面提升':'◉ 描述主体、动作与镜头，让 AI 生成动态画面'}</div>{mode==='image'?<GeneratePanel refill={refill} onModeChange={setMode}/>:<InlineVideoPanel onModeChange={setMode}/>}</div>

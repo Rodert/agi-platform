@@ -86,7 +86,7 @@ func (r *ConfigRepository) GetTaskConfig() (*model.TaskConfig, error) {
 	config := &model.TaskConfig{}
 	err := r.db.First(config, 1).Error
 	if err == gorm.ErrRecordNotFound {
-		return &model.TaskConfig{ID: 1, MaxActiveTasks: 50, PromptMaxLength: 5000, MaxRetryAttempts: 0}, nil
+		return &model.TaskConfig{ID: 1, MaxActiveTasks: 50, PromptMaxLength: 5000, MaxRetryAttempts: 0, ImageConcurrency: 8, VideoConcurrency: 2}, nil
 	}
 	if err != nil {
 		return nil, err

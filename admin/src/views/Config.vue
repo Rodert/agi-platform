@@ -45,6 +45,8 @@
           <el-form-item label="单用户进行中任务上限"><el-input-number v-model="taskConfig.max_active_tasks" :min="1" :max="1000" /></el-form-item>
           <el-form-item label="提示词上限（字符）"><el-input-number v-model="taskConfig.prompt_max_length" :min="1" :max="50000" /></el-form-item>
           <el-form-item label="失败重试次数"><el-input-number v-model="taskConfig.max_retry_attempts" :min="0" :max="10" /></el-form-item>
+          <el-form-item label="图片 Worker 并发"><el-input-number v-model="taskConfig.image_concurrency" :min="1" :max="100" /><span class="field-tip">保存后重启 Worker 生效</span></el-form-item>
+          <el-form-item label="视频 Worker 并发"><el-input-number v-model="taskConfig.video_concurrency" :min="1" :max="100" /><span class="field-tip">保存后重启 Worker 生效</span></el-form-item>
           <el-form-item><el-button type="primary" :loading="saving" @click="saveTaskConfig">保存</el-button></el-form-item>
         </el-form>
       </el-tab-pane>
@@ -115,7 +117,7 @@ const activeTab=ref(configTabs.value[0]),loading=ref(false),saving=ref(false),st
 const hasTab = name => configTabs.value.includes(name)
 const basicConfig=reactive({site_name:'',site_desc:'',register_enabled:true})
 const emailConfig=reactive({smtp_host:'',smtp_port:587,smtp_user:'',smtp_password:'',smtp_ssl:false,from_name:'',from_email:'',is_active:false})
-const taskConfig=reactive({max_active_tasks:50,prompt_max_length:5000,max_retry_attempts:0})
+const taskConfig=reactive({max_active_tasks:50,prompt_max_length:5000,max_retry_attempts:0,image_concurrency:8,video_concurrency:2})
 const promptOptimizationConfig=reactive({is_active:false,model_name:'',system_prompt:'',max_input_length:5000,credit_cost:0,rate_limit_per_minute:5})
 const textModels=computed(()=>allModels.value.filter(model=>model.type==='text'))
 const emptyStorage=()=>({id:0,name:'',type:'local',local_path:'./uploads',endpoint:'',access_key:'',secret_key:'',bucket:'',region:'',domain:''})

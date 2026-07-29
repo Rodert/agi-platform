@@ -86,6 +86,8 @@ type TaskConfig struct {
 	MaxActiveTasks   int       `gorm:"not null;default:50" json:"max_active_tasks"`
 	PromptMaxLength  int       `gorm:"not null;default:5000" json:"prompt_max_length"`
 	MaxRetryAttempts int       `gorm:"not null;default:0" json:"max_retry_attempts"`
+	ImageConcurrency int       `gorm:"not null;default:8" json:"image_concurrency"`
+	VideoConcurrency int       `gorm:"not null;default:2" json:"video_concurrency"`
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
 }
 

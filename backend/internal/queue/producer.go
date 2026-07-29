@@ -24,15 +24,14 @@ type TaskMessage struct {
 
 // Producer 任务生产者
 type Producer struct {
-	redis      *redis.Client
-	streamName string
+	redis        *redis.Client
+	imageStream  string
+	videoStream  string
+	defaultStream string
 }
 
-func NewProducer(rdb *redis.Client, streamName string) *Producer {
-	return &Producer{
-		redis:      rdb,
-		streamName: streamName,
-	}
+func NewProducer(rdb *redis.Client, imageStream, videoStream, defaultStream string) *Producer {
+	return &Producer{redis: rdb, imageStream: imageStream, videoStream: videoStream, defaultStream: defaultStream}
 }
 
 // Publish 发布任务到队列
@@ -42,9 +41,9 @@ func (p *Producer) Publish(ctx context.Context, msg *TaskMessage) error {
 		return fmt.Errorf("序列化任务失败: %w", err)
 	}
 
-	// 发布到 Redis Stream
+	streamName := p.streamFor(msg.Type)
 	_, err = p.redis.XAdd(ctx, &redis.XAddArgs{
-		Stream: p.streamName,
+		Stream: streamName,
 		Values: map[string]interface{}{
 			"task_id":    msg.TaskID,
 			"user_id":    msg.UserID,
@@ -58,6 +57,16 @@ func (p *Producer) Publish(ctx context.Context, msg *TaskMessage) error {
 		return fmt.Errorf("发布任务失败: %w", err)
 	}
 
-	logger.Info(fmt.Sprintf("📨 任务已发布到队列: TaskID=%d, Type=%s", msg.TaskID, msg.Type))
+	logger.Info(fmt.Sprintf("📨 任务已发布到队列: TaskID=%d, Type=%s, Stream=%s", msg.TaskID, msg.Type, streamName))
 	return nil
+}
+
+func (p *Producer) streamFor(taskType string) string {
+	if taskType == "video" && p.videoStream != "" {
+		return p.videoStream
+	}
+	if taskType != "video" && p.imageStream != "" {
+		return p.imageStream
+	}
+	return p.defaultStream
 }

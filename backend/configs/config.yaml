@@ -43,6 +43,10 @@ system:
   rate_limit_per_minute: 60
 
 worker:
-  concurrency: 10
+  concurrency: 10 # 兼容旧配置，未设置分类并发时作为图片并发
   queue_name: agi:tasks
-  redis_stream: agi:stream:tasks
+  redis_stream: agi:stream:tasks # 兼容旧配置
+  image_concurrency: 8
+  video_concurrency: 2
+  image_redis_stream: agi:stream:images
+  video_redis_stream: agi:stream:videos

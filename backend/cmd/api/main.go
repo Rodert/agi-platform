@@ -151,7 +151,7 @@ func initHandlers(cfg *config.Config, router *gin.Engine) {
 	promptOptimizationRepo := repository.NewPromptOptimizationRepository(database.DB)
 
 	// Queue
-	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.RedisStream)
+	queueProducer := queue.NewProducer(database.RDB, cfg.Worker.ImageRedisStream, cfg.Worker.VideoRedisStream, cfg.Worker.RedisStream)
 
 	// Service
 	creditService := service.NewCreditService(database.DB)

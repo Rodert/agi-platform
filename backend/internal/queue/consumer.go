@@ -18,6 +18,7 @@ type Consumer struct {
 	streamName    string
 	consumerGroup string
 	consumerName  string
+	concurrency   int
 	processor     worker.Processor
 	stopChan      chan struct{}
 }
@@ -27,13 +28,18 @@ func NewConsumer(
 	streamName string,
 	consumerGroup string,
 	consumerName string,
+	concurrency int,
 	processor worker.Processor,
 ) *Consumer {
+	if concurrency < 1 {
+		concurrency = 1
+	}
 	return &Consumer{
 		redis:         rdb,
 		streamName:    streamName,
 		consumerGroup: consumerGroup,
 		consumerName:  consumerName,
+		concurrency:   concurrency,
 		processor:     processor,
 		stopChan:      make(chan struct{}),
 	}
@@ -47,10 +53,12 @@ func (c *Consumer) Start(ctx context.Context) error {
 		return fmt.Errorf("创建消费者组失败: %w", err)
 	}
 
-	logger.Info(fmt.Sprintf("🚀 Worker 开始消费队列: %s", c.streamName))
+	logger.Info(fmt.Sprintf("🚀 Worker 开始消费队列: %s，并发数: %d", c.streamName, c.concurrency))
 
-	// 开始消费循环
-	go c.consumeLoop(ctx)
+	for i := 0; i < c.concurrency; i++ {
+		consumerName := fmt.Sprintf("%s-%d", c.consumerName, i+1)
+		go c.consumeLoop(ctx, consumerName)
+	}
 
 	return nil
 }
@@ -62,7 +70,7 @@ func (c *Consumer) Stop() {
 }
 
 // consumeLoop 消费循环
-func (c *Consumer) consumeLoop(ctx context.Context) {
+func (c *Consumer) consumeLoop(ctx context.Context, consumerName string) {
 	for {
 		select {
 		case <-c.stopChan:
@@ -73,7 +81,7 @@ func (c *Consumer) consumeLoop(ctx context.Context) {
 			// 读取消息
 			streams, err := c.redis.XReadGroup(ctx, &redis.XReadGroupArgs{
 				Group:    c.consumerGroup,
-				Consumer: c.consumerName,
+				Consumer: consumerName,
 				Streams:  []string{c.streamName, ">"},
 				Count:    1,
 				Block:    5 * time.Second,
@@ -125,7 +133,11 @@ func (c *Consumer) handleMessage(ctx context.Context, msg redis.XMessage) {
 			zap.Int64("task_id", taskMsg.TaskID),
 			zap.Error(err),
 		)
-		if c.retryTask(ctx, &queueTask) {
+		canRetry := true
+		if decider, ok := c.processor.(worker.RetryDecider); ok {
+			canRetry = decider.ShouldRetry(taskMsg.TaskID)
+		}
+		if canRetry && c.retryTask(ctx, &queueTask) {
 			if processor, ok := c.processor.(worker.RetryProcessor); ok {
 				if markErr := processor.MarkRetrying(queueTask.TaskID); markErr != nil {
 					logger.Error("记录重试状态失败", zap.Int64("task_id", queueTask.TaskID), zap.Error(markErr))

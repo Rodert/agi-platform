@@ -77,9 +77,13 @@ type SystemConfig struct {
 }
 
 type WorkerConfig struct {
-	Concurrency int    `mapstructure:"concurrency"`
-	QueueName   string `mapstructure:"queue_name"`
-	RedisStream string `mapstructure:"redis_stream"`
+	Concurrency      int    `mapstructure:"concurrency"` // legacy fallback
+	QueueName        string `mapstructure:"queue_name"`
+	RedisStream      string `mapstructure:"redis_stream"` // legacy fallback
+	ImageConcurrency int    `mapstructure:"image_concurrency"`
+	VideoConcurrency int    `mapstructure:"video_concurrency"`
+	ImageRedisStream string `mapstructure:"image_redis_stream"`
+	VideoRedisStream string `mapstructure:"video_redis_stream"`
 }
 
 var AppConfig *Config
@@ -155,6 +159,24 @@ func overrideFromEnv(cfg *Config) {
 	}
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
+	}
+	if v := os.Getenv("WORKER_CONCURRENCY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Worker.Concurrency)
+	}
+	if v := os.Getenv("WORKER_IMAGE_CONCURRENCY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Worker.ImageConcurrency)
+	}
+	if v := os.Getenv("WORKER_VIDEO_CONCURRENCY"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Worker.VideoConcurrency)
+	}
+	if v := os.Getenv("WORKER_REDIS_STREAM"); v != "" {
+		cfg.Worker.RedisStream = v
+	}
+	if v := os.Getenv("WORKER_IMAGE_REDIS_STREAM"); v != "" {
+		cfg.Worker.ImageRedisStream = v
+	}
+	if v := os.Getenv("WORKER_VIDEO_REDIS_STREAM"); v != "" {
+		cfg.Worker.VideoRedisStream = v
 	}
 }
 

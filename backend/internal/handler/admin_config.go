@@ -96,6 +96,8 @@ type taskConfigRequest struct {
 	MaxActiveTasks   int `json:"max_active_tasks"`
 	PromptMaxLength  int `json:"prompt_max_length"`
 	MaxRetryAttempts int `json:"max_retry_attempts"`
+	ImageConcurrency int `json:"image_concurrency"`
+	VideoConcurrency int `json:"video_concurrency"`
 }
 type promptOptimizationConfigRequest struct {
 	IsActive           bool   `json:"is_active"`
@@ -234,7 +236,24 @@ func (h *AdminConfigHandler) SaveTaskConfig(c *gin.Context) {
 		response.Error(c, errors.New(errors.ErrCodeBadRequest, "任务配置参数无效"))
 		return
 	}
-	v := &model.TaskConfig{MaxActiveTasks: r.MaxActiveTasks, PromptMaxLength: r.PromptMaxLength, MaxRetryAttempts: r.MaxRetryAttempts}
+	if r.ImageConcurrency == 0 || r.VideoConcurrency == 0 {
+		current, err := h.configRepo.GetTaskConfig()
+		if err != nil {
+			response.Error(c, err)
+			return
+		}
+		if r.ImageConcurrency == 0 {
+			r.ImageConcurrency = current.ImageConcurrency
+		}
+		if r.VideoConcurrency == 0 {
+			r.VideoConcurrency = current.VideoConcurrency
+		}
+	}
+	if r.ImageConcurrency < 1 || r.ImageConcurrency > 100 || r.VideoConcurrency < 1 || r.VideoConcurrency > 100 {
+		response.Error(c, errors.New(errors.ErrCodeBadRequest, "任务并发参数无效"))
+		return
+	}
+	v := &model.TaskConfig{MaxActiveTasks: r.MaxActiveTasks, PromptMaxLength: r.PromptMaxLength, MaxRetryAttempts: r.MaxRetryAttempts, ImageConcurrency: r.ImageConcurrency, VideoConcurrency: r.VideoConcurrency}
 	if e := h.configRepo.UpdateTaskConfig(v); e != nil {
 		response.Error(c, e)
 		return

@@ -25,3 +25,9 @@ type RetryProcessor interface {
 	Processor
 	MarkRetrying(taskID int64) error
 }
+
+// RetryDecider lets a processor suppress automatic retries for requests whose
+// upstream submission outcome is unknown and therefore unsafe to repeat.
+type RetryDecider interface {
+	ShouldRetry(taskID int64) bool
+}

@@ -107,7 +107,13 @@ func (p *ImageProcessor) Process(ctx context.Context, msg *TaskMessage) error {
 	if async, ok := adp.(adapter.AsyncTaskAdapter); ok {
 		result, err = p.processAsyncTask(ctx, task, async, request)
 	} else {
+		if err := p.taskRepo.MarkSubmitting(task); err != nil {
+			return p.failTask(task, attempt, "记录上游提交状态失败: "+err.Error())
+		}
 		result, err = adp.Generate(ctx, request)
+		if err == nil {
+			err = p.taskRepo.MarkSubmissionAccepted(task)
+		}
 	}
 	if err != nil {
 		return p.failTask(task, attempt, fmt.Sprintf("AI 生成失败: %v", err))
@@ -208,7 +214,10 @@ func (p *ImageProcessor) failTask(task *model.Task, attempt *model.TaskAttempt, 
 			logger.Error("记录任务执行失败状态失败", zap.Error(err))
 		}
 	}
-	if task.AttemptCount > task.MaxRetryAttempts {
+	// Once an upstream call began without a saved provider ID, retrying could
+	// create a duplicate generation. Refund it immediately regardless of the
+	// normal retry budget.
+	if (task.ProviderTaskID == "" && (task.SubmissionState == "submitting" || task.SubmissionState == "submitted")) || task.AttemptCount > task.MaxRetryAttempts {
 		if err := p.creditRepo.RefundFailedTask(task); err != nil {
 			logger.Error("返还失败任务灵感值失败", zap.Int64("task_id", task.ID), zap.Error(err))
 		}
@@ -232,6 +241,9 @@ func (p *ImageProcessor) processAsyncTask(ctx context.Context, task *model.Task,
 	defer cancel()
 
 	if task.ProviderTaskID == "" {
+		if err := p.taskRepo.MarkSubmitting(task); err != nil {
+			return nil, fmt.Errorf("记录上游提交状态失败: %w", err)
+		}
 		state, err := adp.Submit(pollCtx, request)
 		if err != nil {
 			return nil, err
@@ -286,6 +298,7 @@ func (p *ImageProcessor) recordAsyncState(task *model.Task, state *adapter.Async
 	now := time.Now()
 	task.ProviderTaskID = state.ProviderTaskID
 	task.ProviderStatus = state.Status
+	task.SubmissionState = "submitted"
 	if len(state.RawResponse) > 0 {
 		task.ProviderResponse = datatypes.JSON(append(json.RawMessage(nil), state.RawResponse...))
 	}
@@ -312,4 +325,15 @@ func asyncFailure(state *adapter.AsyncTask) error {
 
 func (p *ImageProcessor) MarkRetrying(taskID int64) error {
 	return p.taskRepo.MarkRetryQueued(taskID)
+}
+
+func (p *ImageProcessor) ShouldRetry(taskID int64) bool {
+	task, err := p.taskRepo.FindByID(taskID)
+	if err != nil {
+		return false
+	}
+	if task.Status != "failed" {
+		return false
+	}
+	return !(task.ProviderTaskID == "" && (task.SubmissionState == "submitting" || task.SubmissionState == "submitted"))
 }
